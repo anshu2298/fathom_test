@@ -47,6 +47,23 @@ app.get("/api/fathom/callback", async (req, res) => {
       code
     );
 
+    // Verify environment variables
+    if (
+      !process.env.FATHOM_CLIENT_ID ||
+      !process.env.FATHOM_CLIENT_SECRET
+    ) {
+      throw new Error(
+        "Missing FATHOM_CLIENT_ID or FATHOM_CLIENT_SECRET"
+      );
+    }
+
+    const redirectUri = `${process.env.APP_URL}/api/fathom/callback`;
+    console.log("🔗 Redirect URI:", redirectUri);
+    console.log(
+      "🔑 Client ID:",
+      process.env.FATHOM_CLIENT_ID?.substring(0, 10) + "..."
+    );
+
     // Token store for Supabase
     const tokenStore = {
       get: async () => {
@@ -56,7 +73,13 @@ app.get("/api/fathom/callback", async (req, res) => {
           .eq("user_id", TEST_USER_ID)
           .single();
 
-        if (!data) return null;
+        if (!data) {
+          console.log(
+            "📭 No existing token found in database"
+          );
+          return null;
+        }
+        console.log("📦 Found existing token in database");
         return {
           token: data.access_token,
           refresh_token: data.refresh_token,
@@ -66,12 +89,19 @@ app.get("/api/fathom/callback", async (req, res) => {
 
       set: async (token, refresh_token, expires) => {
         console.log("💾 Storing tokens in database");
-        await supabase.from("fathom_connections").upsert({
-          user_id: TEST_USER_ID,
-          access_token: token,
-          refresh_token: refresh_token,
-          token_expires_at: expires,
-        });
+        const { error } = await supabase
+          .from("fathom_connections")
+          .upsert({
+            user_id: TEST_USER_ID,
+            access_token: token,
+            refresh_token: refresh_token,
+            token_expires_at: expires,
+          });
+        if (error) {
+          console.error("❌ Error storing tokens:", error);
+          throw error;
+        }
+        console.log("✅ Tokens stored successfully");
       },
     };
 
@@ -80,8 +110,8 @@ app.get("/api/fathom/callback", async (req, res) => {
     const getSecurity = Fathom.withAuthorization({
       clientId: process.env.FATHOM_CLIENT_ID,
       clientSecret: process.env.FATHOM_CLIENT_SECRET,
-      code,
-      redirectUri: `${process.env.APP_URL}/api/fathom/callback`,
+      code: String(code), // Ensure code is a string
+      redirectUri: redirectUri,
       tokenStore,
     });
 
@@ -127,11 +157,31 @@ app.get("/api/fathom/callback", async (req, res) => {
   } catch (error) {
     console.error("❌ OAuth error:", error);
     console.error("Error stack:", error.stack);
+
+    // Provide helpful error message
+    let errorDetails = error.message;
+    if (error.message.includes("status code: 400")) {
+      errorDetails = `
+        <p><strong>OAuth Token Exchange Failed (400)</strong></p>
+        <p>Common causes:</p>
+        <ul>
+          <li>The redirect URI in your Fathom OAuth app settings must match exactly: <code>${process.env.APP_URL}/api/fathom/callback</code></li>
+          <li>Authorization codes can only be used once - try clicking "Connect Fathom" again</li>
+          <li>Authorization codes expire quickly - make sure you're completing the flow promptly</li>
+          <li>Check that your FATHOM_CLIENT_ID and FATHOM_CLIENT_SECRET are correct</li>
+        </ul>
+        <p><strong>Redirect URI used:</strong> <code>${process.env.APP_URL}/api/fathom/callback</code></p>
+      `;
+    }
+
     res.status(500).send(`
       <h1>❌ Error Connecting to Fathom</h1>
       <p><strong>Error:</strong> ${error.message}</p>
-      <p><strong>Details:</strong> Check server console for more information</p>
+      ${errorDetails}
+      <p><strong>Server logs:</strong> Check server console for more information</p>
       <a href="/">Back to test page</a>
+      <br><br>
+      <a href="/api/fathom/connect">Try connecting again</a>
     `);
   }
 });
