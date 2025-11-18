@@ -1,7 +1,6 @@
 import express from "express";
 import { Fathom } from "fathom-typescript";
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
 import dotenv from "dotenv";
 dotenv.config();
 const app = express();
@@ -396,6 +395,7 @@ app.post("/api/fathom/import", async (req, res) => {
       Math.max(parseInt(limitRaw, 10) || 20, 1),
       100
     );
+
     const filters = {};
 
     if (req.body?.createdAfter) {
@@ -412,6 +412,7 @@ app.post("/api/fathom/import", async (req, res) => {
       },
     });
 
+    // CORRECTED: Use recordings.getTranscript instead of getRecordingTranscript
     const iterator = await fathom.listMeetings(filters);
     const requested = [];
     const webhookDestination = `${process.env.APP_URL}/api/fathom/webhook/${TEST_USER_ID}?source=backfill`;
@@ -420,23 +421,37 @@ app.post("/api/fathom/import", async (req, res) => {
       const meetings = page?.result?.items || [];
 
       for (const meeting of meetings) {
+        if (!meeting.recordingId) {
+          console.log(
+            "⚠️ Skipping meeting without recordingId:",
+            meeting.title
+          );
+          continue;
+        }
+
         console.log(
           "🗂️ Requesting transcript backfill for recording:",
           meeting.recordingId
         );
-        await fathom.getRecordingTranscript({
-          recordingId: meeting.recordingId,
-          destinationUrl: webhookDestination,
-        });
 
-        requested.push({
-          recordingId: meeting.recordingId,
-          title: meeting.title,
-          createdAt:
-            meeting.createdAt instanceof Date
-              ? meeting.createdAt.toISOString()
-              : new Date(meeting.createdAt).toISOString(),
-        });
+        try {
+          // CORRECTED: Proper SDK method call
+          await fathom.recordings.getTranscript({
+            recordingId: String(meeting.recordingId),
+            destinationUrl: webhookDestination,
+          });
+
+          requested.push({
+            recordingId: meeting.recordingId,
+            title: meeting.title,
+            createdAt: meeting.createdAt,
+          });
+        } catch (err) {
+          console.error(
+            `❌ Failed to request transcript for ${meeting.recordingId}:`,
+            err.message
+          );
+        }
 
         if (requested.length >= limit) {
           break;
