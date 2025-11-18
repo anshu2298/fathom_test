@@ -132,13 +132,14 @@ app.get("/api/fathom/callback", async (req, res) => {
 
       set: async (token, refresh_token, expires) => {
         console.log("💾 Storing tokens in database");
+        const expiresSeconds = Math.floor(expires || 0);
         const { error } = await supabase
           .from("fathom_connections")
           .upsert({
             user_id: TEST_USER_ID,
             access_token: token,
             refresh_token: refresh_token,
-            token_expires_at: expires,
+            token_expires_at: expiresSeconds,
           });
         if (error) {
           console.error("❌ Error storing tokens:", error);
