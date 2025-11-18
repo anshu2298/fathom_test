@@ -106,11 +106,10 @@ app.get("/api/fathom/callback", async (req, res) => {
     );
 
     const webhook = await fathom.createWebhook({
-      requestBody: {
-        destination_url: webhookUrl,
-        include_transcript: true,
-        include_summary: true,
-      },
+      destinationUrl: webhookUrl,
+      includeTranscript: true,
+      includeSummary: true,
+      triggeredFor: ["my_recordings"], // Required: array of recording types to trigger on
     });
 
     // Store webhook ID
