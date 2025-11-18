@@ -46,6 +46,133 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+const FATHOM_TOKEN_URL =
+  "https://fathom.video/external/v1/oauth2/token";
+const TOKEN_REFRESH_BUFFER_SECONDS = 60;
+
+const ensureFathomEnv = () => {
+  if (
+    !process.env.FATHOM_CLIENT_ID ||
+    !process.env.FATHOM_CLIENT_SECRET
+  ) {
+    throw new Error(
+      "Missing FATHOM_CLIENT_ID or FATHOM_CLIENT_SECRET"
+    );
+  }
+};
+
+const persistConnectionTokens = async (
+  token,
+  refreshToken,
+  expires
+) => {
+  const expiresSeconds = Math.floor(expires || 0);
+  const { error } = await supabase
+    .from("fathom_connections")
+    .upsert({
+      user_id: TEST_USER_ID,
+      access_token: token,
+      refresh_token: refreshToken,
+      token_expires_at: expiresSeconds,
+    });
+
+  if (error) {
+    console.error("❌ Error storing tokens:", error);
+    throw error;
+  }
+
+  console.log("✅ Tokens stored successfully");
+};
+
+const fetchConnectionRow = async () => {
+  const { data, error } = await supabase
+    .from("fathom_connections")
+    .select("*")
+    .eq("user_id", TEST_USER_ID)
+    .maybeSingle();
+
+  if (error) {
+    console.error("❌ Error fetching connection:", error);
+    throw error;
+  }
+
+  return data;
+};
+
+const refreshStoredAccessToken = async (connection) => {
+  ensureFathomEnv();
+
+  if (!connection?.refresh_token) {
+    throw new Error(
+      "No refresh token stored for this user"
+    );
+  }
+
+  console.log("🔄 Refreshing Fathom access token...");
+
+  const response = await fetch(FATHOM_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      client_id: process.env.FATHOM_CLIENT_ID,
+      client_secret: process.env.FATHOM_CLIENT_SECRET,
+      refresh_token: connection.refresh_token,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(
+      "🛑 Token refresh failed:",
+      response.status,
+      errorText
+    );
+    throw new Error(
+      `Failed to refresh access token (${response.status})`
+    );
+  }
+
+  const json = await response.json();
+  const expiresAt =
+    Math.floor(Date.now() / 1000) +
+    (json.expires_in ?? 0) -
+    TOKEN_REFRESH_BUFFER_SECONDS;
+
+  await persistConnectionTokens(
+    json.access_token,
+    json.refresh_token ?? connection.refresh_token,
+    expiresAt
+  );
+
+  return json.access_token;
+};
+
+const getValidAccessToken = async () => {
+  ensureFathomEnv();
+  const connection = await fetchConnectionRow();
+
+  if (!connection || !connection.access_token) {
+    throw new Error(
+      "This user has not connected Fathom yet. Please run the OAuth flow first."
+    );
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const expiresAt = connection.token_expires_at || 0;
+
+  if (
+    expiresAt >
+    nowSeconds + TOKEN_REFRESH_BUFFER_SECONDS
+  ) {
+    return connection.access_token;
+  }
+
+  return refreshStoredAccessToken(connection);
+};
+
 // For testing, use a hardcoded test user ID
 const TEST_USER_ID = "test-user-123";
 
@@ -100,16 +227,7 @@ app.get("/api/fathom/callback", async (req, res) => {
     // Token store for Supabase
     const tokenStore = {
       get: async () => {
-        const { data, error } = await supabase
-          .from("fathom_connections")
-          .select("*")
-          .eq("user_id", TEST_USER_ID)
-          .maybeSingle();
-
-        if (error) {
-          console.error("❌ Error fetching tokens:", error);
-          throw error;
-        }
+        const data = await fetchConnectionRow();
 
         if (!data || !data.access_token) {
           console.log(
@@ -132,20 +250,11 @@ app.get("/api/fathom/callback", async (req, res) => {
 
       set: async (token, refresh_token, expires) => {
         console.log("💾 Storing tokens in database");
-        const expiresSeconds = Math.floor(expires || 0);
-        const { error } = await supabase
-          .from("fathom_connections")
-          .upsert({
-            user_id: TEST_USER_ID,
-            access_token: token,
-            refresh_token: refresh_token,
-            token_expires_at: expiresSeconds,
-          });
-        if (error) {
-          console.error("❌ Error storing tokens:", error);
-          throw error;
-        }
-        console.log("✅ Tokens stored successfully");
+        await persistConnectionTokens(
+          token,
+          refresh_token,
+          expires
+        );
       },
     };
 
@@ -275,6 +384,92 @@ app.get("/api/fathom/meetings", async (req, res) => {
   }
 
   res.json({ meetings: data });
+});
+
+// ============================================
+// Route 5: Backfill Historical Meetings
+// ============================================
+app.post("/api/fathom/import", async (req, res) => {
+  try {
+    const limitRaw = req.body?.limit;
+    const limit = Math.min(
+      Math.max(parseInt(limitRaw, 10) || 20, 1),
+      100
+    );
+    const filters = {};
+
+    if (req.body?.createdAfter) {
+      filters.createdAfter = req.body.createdAfter;
+    }
+    if (req.body?.createdBefore) {
+      filters.createdBefore = req.body.createdBefore;
+    }
+
+    const accessToken = await getValidAccessToken();
+    const fathom = new Fathom({
+      security: {
+        bearerAuth: accessToken,
+      },
+    });
+
+    const iterator = await fathom.listMeetings(filters);
+    const requested = [];
+    const webhookDestination = `${process.env.APP_URL}/api/fathom/webhook/${TEST_USER_ID}?source=backfill`;
+
+    for await (const page of iterator) {
+      const meetings = page?.result?.items || [];
+
+      for (const meeting of meetings) {
+        console.log(
+          "🗂️ Requesting transcript backfill for recording:",
+          meeting.recordingId
+        );
+        await fathom.getRecordingTranscript({
+          recordingId: meeting.recordingId,
+          destinationUrl: webhookDestination,
+        });
+
+        requested.push({
+          recordingId: meeting.recordingId,
+          title: meeting.title,
+          createdAt:
+            meeting.createdAt instanceof Date
+              ? meeting.createdAt.toISOString()
+              : new Date(meeting.createdAt).toISOString(),
+        });
+
+        if (requested.length >= limit) {
+          break;
+        }
+      }
+
+      if (requested.length >= limit) {
+        break;
+      }
+    }
+
+    if (requested.length === 0) {
+      return res.json({
+        requested: 0,
+        message:
+          "No historical meetings matched the provided filters.",
+      });
+    }
+
+    res.json({
+      requested: requested.length,
+      message:
+        "Requested transcripts for existing meetings. They will be delivered via the webhook shortly.",
+      meetings: requested,
+    });
+  } catch (error) {
+    console.error("❌ Historical import error:", error);
+    res.status(500).json({
+      error:
+        error?.message ||
+        "Failed to import historical meetings from Fathom",
+    });
+  }
 });
 
 // ============================================
