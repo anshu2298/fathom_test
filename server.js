@@ -100,23 +100,33 @@ app.get("/api/fathom/callback", async (req, res) => {
     // Token store for Supabase
     const tokenStore = {
       get: async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("fathom_connections")
           .select("*")
           .eq("user_id", TEST_USER_ID)
-          .single();
+          .maybeSingle();
 
-        if (!data) {
+        if (error) {
+          console.error("❌ Error fetching tokens:", error);
+          throw error;
+        }
+
+        if (!data || !data.access_token) {
           console.log(
             "📭 No existing token found in database"
           );
-          return null;
+          return {
+            token: "",
+            refresh_token: "",
+            expires: 0,
+          };
         }
+
         console.log("📦 Found existing token in database");
         return {
-          token: data.access_token,
-          refresh_token: data.refresh_token,
-          expires: data.token_expires_at,
+          token: data.access_token || "",
+          refresh_token: data.refresh_token || "",
+          expires: data.token_expires_at || 0,
         };
       },
 
