@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Fathom Test</title>
+    <style>
+      body {
+        font-family: Arial;
+        max-width: 800px;
+        margin: 50px auto;
+        padding: 20px;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        margin: 10px 5px;
+      }
+      .status {
+        padding: 10px;
+        background: #f0f0f0;
+        border-radius: 5px;
+        margin: 20px 0;
+      }
+      .meeting {
+        border: 1px solid #ddd;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🧪 Fathom Integration Test</h1>
+
+    <div class="status">
+      <h3>Connection Status</h3>
+      <p id="status">Checking...</p>
+      <button onclick="checkStatus()">
+        Refresh Status
+      </button>
+    </div>
+
+    <div>
+      <button onclick="connect()">🔗 Connect Fathom</button>
+      <button onclick="loadMeetings()">
+        🔄 Reload Meetings
+      </button>
+    </div>
+
+    <h3>Received Meetings</h3>
+    <div id="meetings">Loading...</div>
+
+    <script>
+      async function checkStatus() {
+        const res = await fetch("/api/fathom/status");
+        const data = await res.json();
+        document.getElementById("status").textContent =
+          data.connected
+            ? `✅ Connected (Webhook: ${data.webhook_id})`
+            : "❌ Not connected";
+      }
+
+      function connect() {
+        window.location.href = "/api/fathom/connect";
+      }
+
+      async function loadMeetings() {
+        const res = await fetch("/api/fathom/meetings");
+        const data = await res.json();
+
+        const container =
+          document.getElementById("meetings");
+
+        if (data.meetings.length === 0) {
+          container.innerHTML =
+            "<p>No meetings yet. Record a test meeting in Fathom!</p>";
+          return;
+        }
+
+        container.innerHTML = data.meetings
+          .map(
+            (m) => `
+        <div class="meeting">
+          <strong>${m.title || "Untitled"}</strong><br>
+          <small>${new Date(
+            m.created_at
+          ).toLocaleString()}</small><br>
+          <small>Transcript items: ${
+            m.transcript?.length || 0
+          }</small>
+        </div>
+      `
+          )
+          .join("");
+      }
+
+      // Auto-load on page load
+      checkStatus();
+      loadMeetings();
+    </script>
+  </body>
+</html>
