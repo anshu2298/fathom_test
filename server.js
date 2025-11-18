@@ -398,10 +398,9 @@ app.post("/api/fathom/import", async (req, res) => {
       },
     });
 
-    // No filters - get ALL meetings
+    // Get all meetings with full details
     const iterator = await fathom.listMeetings({});
-    const requested = [];
-    const webhookDestination = `${process.env.APP_URL}/api/fathom/webhook/${TEST_USER_ID}?source=backfill`;
+    const processed = [];
 
     console.log(
       "🗂️ Starting import of all historical meetings..."
@@ -423,26 +422,20 @@ app.post("/api/fathom/import", async (req, res) => {
         }
 
         console.log(
-          "🗂️ Requesting transcript backfill for recording:",
+          "🗂️ Fetching transcript for:",
           meeting.recordingId,
           "-",
           meeting.title
         );
 
         try {
-          // FIXED: Use Authorization: Bearer header for OAuth tokens
-          const url = new URL(
-            `https://api.fathom.ai/external/v1/recordings/${meeting.recordingId}/transcript`
-          );
-          url.searchParams.append(
-            "destination_url",
-            webhookDestination
-          );
+          // Fetch transcript directly (not via webhook)
+          const url = `https://api.fathom.ai/external/v1/recordings/${meeting.recordingId}/transcript`;
 
-          const response = await fetch(url.toString(), {
+          const response = await fetch(url, {
             method: "GET",
             headers: {
-              Authorization: `Bearer ${accessToken}`, // Use Bearer for OAuth
+              Authorization: `Bearer ${accessToken}`,
             },
           });
 
@@ -454,55 +447,76 @@ app.post("/api/fathom/import", async (req, res) => {
               errorText
             );
             throw new Error(
-              `API returned ${response.status}: ${errorText}`
+              `API returned ${response.status}`
             );
           }
 
-          const result = await response.json();
-          console.log(`✅ Response:`, result);
+          const transcript = await response.json();
+          console.log(
+            `✅ Got transcript with ${transcript.length} items`
+          );
 
-          requested.push({
+          // Insert directly into database with full meeting details
+          await supabase
+            .from("meeting_transcripts")
+            .insert({
+              user_id: TEST_USER_ID,
+              recording_id: meeting.recordingId,
+              title: meeting.title,
+              meeting_title:
+                meeting.meetingTitle || meeting.title,
+              url: meeting.url,
+              transcript: transcript,
+              summary: null, // We don't get summary from transcript endpoint
+              action_items: null,
+              calendar_invitees: null,
+              raw_payload: { meeting, transcript },
+              created_at:
+                meeting.createdAt ||
+                new Date().toISOString(),
+            });
+
+          processed.push({
             recordingId: meeting.recordingId,
             title: meeting.title,
             createdAt: meeting.createdAt,
+            transcriptItems: transcript.length,
           });
 
           console.log(
-            `✅ Requested transcript ${requested.length}`
+            `✅ Saved meeting ${processed.length} to database`
           );
         } catch (err) {
           console.error(
-            `❌ Failed to request transcript for ${meeting.recordingId}:`,
+            `❌ Failed to process ${meeting.recordingId}:`,
             err.message
           );
-          // Continue with next meeting instead of failing entire import
         }
       }
     }
 
     console.log(
-      `🎉 Finished requesting ${requested.length} transcripts`
+      `🎉 Finished importing ${processed.length} meetings`
     );
 
-    if (requested.length === 0) {
+    if (processed.length === 0) {
       return res.json({
         requested: 0,
-        message:
-          "No meetings found in your Fathom account, or all requests failed.",
+        message: "No meetings found or all imports failed.",
       });
     }
 
     res.json({
-      requested: requested.length,
-      message: `Requested transcripts for all ${requested.length} meeting(s). They will be delivered via webhook shortly.`,
-      meetings: requested,
+      requested: processed.length,
+      message: `Successfully imported ${processed.length} meeting(s) with transcripts.`,
+      meetings: processed,
     });
   } catch (error) {
     console.error("❌ Historical import error:", error);
     res.status(500).json({
       error:
         error?.message ||
-        "Failed to import historical meetings from Fathom",
+        "Failed to import historical meetings",
     });
   }
 });
