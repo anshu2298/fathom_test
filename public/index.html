@@ -538,16 +538,6 @@
 
       // Auto-refresh meetings every 30 seconds
       setInterval(loadMeetings, 30000);
-
-      // Set default dates (last 30 days)
-      const now = new Date();
-      const thirtyDaysAgo = new Date(
-        now.getTime() - 30 * 24 * 60 * 60 * 1000
-      );
-
-      // Format for datetime-local input (YYYY-MM-DDTHH:mm)
-      document.getElementById("createdAfter").value =
-        thirtyDaysAgo.toISOString().slice(0, 16);
     </script>
   </body>
 </html>
