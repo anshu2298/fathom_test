@@ -388,23 +388,9 @@ app.get("/api/fathom/meetings", async (req, res) => {
 // ============================================
 // Route 5: Backfill Historical Meetings
 // ============================================
+
 app.post("/api/fathom/import", async (req, res) => {
   try {
-    const limitRaw = req.body?.limit;
-    const limit = Math.min(
-      Math.max(parseInt(limitRaw, 10) || 20, 1),
-      100
-    );
-
-    const filters = {};
-
-    if (req.body?.createdAfter) {
-      filters.createdAfter = req.body.createdAfter;
-    }
-    if (req.body?.createdBefore) {
-      filters.createdBefore = req.body.createdBefore;
-    }
-
     const accessToken = await getValidAccessToken();
     const fathom = new Fathom({
       security: {
@@ -412,13 +398,20 @@ app.post("/api/fathom/import", async (req, res) => {
       },
     });
 
-    // CORRECTED: Use recordings.getTranscript instead of getRecordingTranscript
-    const iterator = await fathom.listMeetings(filters);
+    // No filters - get ALL meetings
+    const iterator = await fathom.listMeetings({});
     const requested = [];
     const webhookDestination = `${process.env.APP_URL}/api/fathom/webhook/${TEST_USER_ID}?source=backfill`;
 
+    console.log(
+      "🗂️ Starting import of all historical meetings..."
+    );
+
     for await (const page of iterator) {
       const meetings = page?.result?.items || [];
+      console.log(
+        `📄 Processing page with ${meetings.length} meetings`
+      );
 
       for (const meeting of meetings) {
         if (!meeting.recordingId) {
@@ -431,50 +424,77 @@ app.post("/api/fathom/import", async (req, res) => {
 
         console.log(
           "🗂️ Requesting transcript backfill for recording:",
-          meeting.recordingId
+          meeting.recordingId,
+          "-",
+          meeting.title
         );
 
         try {
-          // CORRECTED: Proper SDK method call
-          await fathom.recordings.getTranscript({
-            recordingId: String(meeting.recordingId),
-            destinationUrl: webhookDestination,
+          // FIXED: Use Authorization: Bearer header for OAuth tokens
+          const url = new URL(
+            `https://api.fathom.ai/external/v1/recordings/${meeting.recordingId}/transcript`
+          );
+          url.searchParams.append(
+            "destination_url",
+            webhookDestination
+          );
+
+          const response = await fetch(url.toString(), {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`, // Use Bearer for OAuth
+            },
           });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(
+              `❌ API error for ${meeting.recordingId}:`,
+              response.status,
+              errorText
+            );
+            throw new Error(
+              `API returned ${response.status}: ${errorText}`
+            );
+          }
+
+          const result = await response.json();
+          console.log(`✅ Response:`, result);
 
           requested.push({
             recordingId: meeting.recordingId,
             title: meeting.title,
             createdAt: meeting.createdAt,
           });
+
+          console.log(
+            `✅ Requested transcript ${requested.length}`
+          );
         } catch (err) {
           console.error(
             `❌ Failed to request transcript for ${meeting.recordingId}:`,
             err.message
           );
+          // Continue with next meeting instead of failing entire import
         }
-
-        if (requested.length >= limit) {
-          break;
-        }
-      }
-
-      if (requested.length >= limit) {
-        break;
       }
     }
+
+    console.log(
+      `🎉 Finished requesting ${requested.length} transcripts`
+    );
 
     if (requested.length === 0) {
       return res.json({
         requested: 0,
         message:
-          "No historical meetings matched the provided filters.",
+          "No meetings found in your Fathom account, or all requests failed.",
       });
     }
 
     res.json({
       requested: requested.length,
-      message:
-        "Requested transcripts for existing meetings. They will be delivered via the webhook shortly.",
+      message: `Requested transcripts for all ${requested.length} meeting(s). They will be delivered via webhook shortly.`,
       meetings: requested,
     });
   } catch (error) {
