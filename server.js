@@ -42,6 +42,11 @@ app.get("/api/fathom/callback", async (req, res) => {
   }
 
   try {
+    console.log(
+      "🔐 Starting OAuth callback with code:",
+      code
+    );
+
     // Token store for Supabase
     const tokenStore = {
       get: async () => {
@@ -60,6 +65,7 @@ app.get("/api/fathom/callback", async (req, res) => {
       },
 
       set: async (token, refresh_token, expires) => {
+        console.log("💾 Storing tokens in database");
         await supabase.from("fathom_connections").upsert({
           user_id: TEST_USER_ID,
           access_token: token,
@@ -70,20 +76,36 @@ app.get("/api/fathom/callback", async (req, res) => {
     };
 
     // Initialize Fathom with OAuth
-    const fathom = new Fathom({
-      security: Fathom.withAuthorization({
-        clientId: process.env.FATHOM_CLIENT_ID,
-        clientSecret: process.env.FATHOM_CLIENT_SECRET,
-        code,
-        redirectUri: `${process.env.APP_URL}/api/fathom/callback`,
-        tokenStore,
-      }),
+    console.log("🚀 Initializing Fathom client...");
+    const getSecurity = Fathom.withAuthorization({
+      clientId: process.env.FATHOM_CLIENT_ID,
+      clientSecret: process.env.FATHOM_CLIENT_SECRET,
+      code,
+      redirectUri: `${process.env.APP_URL}/api/fathom/callback`,
+      tokenStore,
     });
+
+    const fathom = new Fathom({
+      security: getSecurity,
+    });
+
+    // Verify Fathom instance is properly initialized
+    console.log("🔍 Fathom instance created");
+
+    if (!fathom) {
+      throw new Error(
+        "Fathom instance not properly initialized"
+      );
+    }
 
     // Create webhook
     const webhookUrl = `${process.env.APP_URL}/api/fathom/webhook/${TEST_USER_ID}`;
+    console.log(
+      "📡 Creating webhook with URL:",
+      webhookUrl
+    );
 
-    const webhook = await fathom.webhooks.create({
+    const webhook = await fathom.createWebhook({
       requestBody: {
         destination_url: webhookUrl,
         include_transcript: true,
@@ -104,8 +126,14 @@ app.get("/api/fathom/callback", async (req, res) => {
       <a href="/">Back to test page</a>
     `);
   } catch (error) {
-    console.error("OAuth error:", error);
-    res.status(500).send(`Error: ${error.message}`);
+    console.error("❌ OAuth error:", error);
+    console.error("Error stack:", error.stack);
+    res.status(500).send(`
+      <h1>❌ Error Connecting to Fathom</h1>
+      <p><strong>Error:</strong> ${error.message}</p>
+      <p><strong>Details:</strong> Check server console for more information</p>
+      <a href="/">Back to test page</a>
+    `);
   }
 });
 
