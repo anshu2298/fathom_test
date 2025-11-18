@@ -8,6 +8,39 @@ const app = express();
 app.use(express.json());
 app.use(express.static("public"));
 
+// ============================================================
+// Debug helper: log Fathom OAuth token exchange failures
+// ============================================================
+if (typeof fetch === "function") {
+  const originalFetch = fetch;
+  global.fetch = async (url, options) => {
+    const response = await originalFetch(url, options);
+
+    const isTokenEndpoint =
+      typeof url === "string" &&
+      url.includes("fathom.video/external/v1/oauth2/token");
+
+    if (isTokenEndpoint && !response.ok) {
+      try {
+        const cloned = response.clone();
+        const errorBody = await cloned.text();
+        console.error(
+          "🛑 Fathom OAuth token exchange failed:",
+          response.status,
+          errorBody
+        );
+      } catch (cloneError) {
+        console.error(
+          "🛑 Fathom OAuth token exchange failed and response body could not be read:",
+          cloneError
+        );
+      }
+    }
+
+    return response;
+  };
+}
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
