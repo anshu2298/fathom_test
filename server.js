@@ -474,8 +474,6 @@ app.post(
         user_id: userId,
         title: payload.title || payload.meeting_title,
         transcript: transcript,
-        summary: payload.summary || null,
-        action_items: payload.action_items || null,
         created_at:
           payload.created_at || new Date().toISOString(),
       });
@@ -648,9 +646,6 @@ app.post("/api/fathom/import", async (req, res) => {
                 meeting.meetingTitle || meeting.title,
               url: meeting.url,
               transcript: transcript,
-              summary: null, // We don't get summary from transcript endpoint
-              action_items: null,
-              calendar_invitees: null,
               raw_payload: { meeting, transcript },
               created_at:
                 meeting.createdAt ||
