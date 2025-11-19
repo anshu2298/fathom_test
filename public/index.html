@@ -226,6 +226,27 @@
   <body>
     <h1>🧪 Fathom Integration Test</h1>
 
+    <!-- User ID Management -->
+    <div class="card">
+      <h3>👤 User ID (for Testing)</h3>
+      <div style="margin: 16px 0;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <strong style="color: #374151;">Your User ID:</strong>
+          <code id="userIdDisplay" style="background: #f3f4f6; padding: 8px 12px; border-radius: 6px; font-size: 14px; color: #111827; font-weight: 600;">Loading...</code>
+        </div>
+        <p style="color: #6b7280; font-size: 14px; margin: 8px 0;">
+          Each user gets a unique ID for data isolation. In production, this will come from your auth system.
+        </p>
+        <button
+          class="btn-secondary"
+          onclick="generateNewUserId()"
+          style="font-size: 14px; padding: 8px 16px;"
+        >
+          🔄 Generate New User ID
+        </button>
+      </div>
+    </div>
+
     <!-- Connection Status -->
     <div class="card">
       <h3>Connection Status</h3>
@@ -299,10 +320,59 @@
     </div>
 
     <script>
+      // User ID Management
+      const USER_ID_KEY = 'fathom_test_user_id';
+
+      // Generate a unique user ID
+      function generateUserId() {
+        return 'user_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
+      }
+
+      // Get or create user ID
+      function getUserId() {
+        let userId = localStorage.getItem(USER_ID_KEY);
+        if (!userId) {
+          userId = generateUserId();
+          localStorage.setItem(USER_ID_KEY, userId);
+        }
+        return userId;
+      }
+
+      // Generate new user ID
+      function generateNewUserId() {
+        const newUserId = generateUserId();
+        localStorage.setItem(USER_ID_KEY, newUserId);
+        updateUserIdDisplay();
+        // Reload page to reset state
+        window.location.href = `/?user_id=${newUserId}`;
+      }
+
+      // Update user ID display
+      function updateUserIdDisplay() {
+        const userId = getUserId();
+        document.getElementById('userIdDisplay').textContent = userId;
+      }
+
+      // Get user ID from URL or localStorage
+      function getUserIdFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('user_id') || getUserId();
+      }
+
+      // Initialize user ID on page load
+      (function initUserId() {
+        const urlUserId = new URLSearchParams(window.location.search).get('user_id');
+        if (urlUserId) {
+          localStorage.setItem(USER_ID_KEY, urlUserId);
+        }
+        updateUserIdDisplay();
+      })();
+
       // Check connection status
       async function checkStatus() {
         try {
-          const res = await fetch("/api/fathom/status");
+          const userId = getUserIdFromUrl();
+          const res = await fetch(`/api/fathom/status?user_id=${encodeURIComponent(userId)}`);
           const data = await res.json();
 
           const statusEl =
@@ -314,25 +384,29 @@
               ✅ <strong>Connected</strong><br>
               <small>Webhook ID: ${
                 data.webhook_id || "N/A"
-              }</small>
+              }</small><br>
+              <small>User ID: ${data.user_id || userId}</small>
             `;
           } else {
             statusEl.className = "status disconnected";
             statusEl.innerHTML = `
               ❌ <strong>Not Connected</strong><br>
-              <small>Click "Connect Fathom" to set up integration</small>
+              <small>Click "Connect Fathom" to set up integration</small><br>
+              <small>User ID: ${userId}</small>
             `;
           }
         } catch (error) {
           console.error("Status check error:", error);
+          const userId = getUserIdFromUrl();
           document.getElementById("status").innerHTML =
-            "⚠️ Error checking status";
+            `⚠️ Error checking status (User ID: ${userId})`;
         }
       }
 
       // Connect to Fathom
       function connect() {
-        window.location.href = "/api/fathom/connect";
+        const userId = getUserIdFromUrl();
+        window.location.href = `/api/fathom/connect?user_id=${encodeURIComponent(userId)}`;
       }
 
       // Load meetings from database
@@ -346,8 +420,13 @@
           '<div class="loading">Loading...</div>';
 
         try {
-          const res = await fetch("/api/fathom/meetings");
+          const userId = getUserIdFromUrl();
+          const res = await fetch(`/api/fathom/meetings?user_id=${encodeURIComponent(userId)}`);
           const data = await res.json();
+
+          if (data.error) {
+            throw new Error(data.error);
+          }
 
           countEl.textContent = data.meetings?.length || 0;
 
@@ -369,7 +448,27 @@
 
           container.innerHTML = data.meetings
             .map((m) => {
-              const transcript = m.transcript || [];
+              // Handle different transcript formats
+              let transcript = [];
+              if (m.transcript) {
+                if (Array.isArray(m.transcript)) {
+                  // Already an array
+                  transcript = m.transcript;
+                } else if (typeof m.transcript === 'string') {
+                  // JSON string, try to parse
+                  try {
+                    const parsed = JSON.parse(m.transcript);
+                    transcript = Array.isArray(parsed) ? parsed : (parsed.transcript || []);
+                  } catch (e) {
+                    console.warn('Failed to parse transcript:', e);
+                    transcript = [];
+                  }
+                } else if (m.transcript.transcript && Array.isArray(m.transcript.transcript)) {
+                  // Object with transcript property (e.g., {"transcript": [...]})
+                  transcript = m.transcript.transcript;
+                }
+              }
+              
               const transcriptPreview = transcript.slice(
                 0,
                 5
@@ -464,12 +563,13 @@
           '<div class="loading">Requesting all transcripts from Fathom...</div>';
 
         try {
-          const res = await fetch("/api/fathom/import", {
+          const userId = getUserIdFromUrl();
+          const res = await fetch(`/api/fathom/import?user_id=${encodeURIComponent(userId)}`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({}),
+            body: JSON.stringify({ user_id: userId }),
           });
 
           const data = await res.json();
@@ -478,22 +578,24 @@
             throw new Error(data.error || "Import failed");
           }
 
-          // Show success message
+          // Show success message with import/skip stats
+          const importedCount = data.imported || 0;
+          const skippedCount = data.skipped || 0;
+          const hasImported = importedCount > 0;
+          const hasSkipped = skippedCount > 0;
+
           resultDiv.innerHTML = `
-            <div class="result-message success">
-              ✅ <strong>Import requested successfully!</strong><br>
+            <div class="result-message ${hasImported ? 'success' : 'info'}" style="background: ${hasImported ? '#d1fae5' : '#dbeafe'}; color: ${hasImported ? '#065f46' : '#1e40af'}; border: 1px solid ${hasImported ? '#10b981' : '#3b82f6'};">
+              ${hasImported ? '✅' : 'ℹ️'} <strong>Import completed!</strong><br>
               <small>
-                Requested transcripts for ${
-                  data.requested
-                } meeting(s). 
-                They will appear in the list below within 1-2 minutes.
+                ${data.message || `Imported ${importedCount} new meeting(s). ${skippedCount} meeting(s) were skipped.`}
               </small>
             </div>
             ${
               data.meetings && data.meetings.length > 0
                 ? `
               <div style="margin-top: 12px;">
-                <strong>Requested meetings:</strong>
+                <strong>✅ Newly imported meetings (${importedCount}):</strong>
                 <ul style="margin: 8px 0; padding-left: 20px; color: #374151;">
                   ${data.meetings
                     .map(
@@ -502,10 +604,32 @@
                       m.title || "Untitled"
                     } - ${new Date(
                         m.createdAt
-                      ).toLocaleDateString()}</li>
+                      ).toLocaleDateString()} (${m.transcriptItems || 0} transcript items)</li>
                   `
                     )
                     .join("")}
+                </ul>
+              </div>
+            `
+                : ""
+            }
+            ${
+              data.skipped_meetings && data.skipped_meetings.length > 0
+                ? `
+              <div style="margin-top: 12px;">
+                <strong>⏭️ Skipped meetings (${skippedCount}):</strong>
+                <ul style="margin: 8px 0; padding-left: 20px; color: #6b7280; font-size: 13px;">
+                  ${data.skipped_meetings
+                    .slice(0, 10)
+                    .map(
+                      (m) => `
+                    <li>${
+                      m.title || "Untitled"
+                    } - ${m.reason === 'already_exists' ? 'Already in database' : `Error: ${m.error || 'Unknown'}`}</li>
+                  `
+                    )
+                    .join("")}
+                  ${data.skipped_meetings.length > 10 ? `<li style="font-style: italic;">... and ${data.skipped_meetings.length - 10} more</li>` : ''}
                 </ul>
               </div>
             `
