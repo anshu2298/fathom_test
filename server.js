@@ -365,17 +365,61 @@ app.get("/api/fathom/callback", async (req, res) => {
       webhookUrl
     );
 
-    const webhook = await fathom.createWebhook({
-      destinationUrl: webhookUrl,
-      includeTranscript: true,
-      includeSummary: true,
-      triggeredFor: ["my_recordings"], // Required: array of recording types to trigger on
-    });
+    // Create webhook according to official Fathom API
+    // Try SDK first (may use camelCase), fallback to raw API if needed
+    let webhook;
+    try {
+      // Try with camelCase (typical TypeScript SDK format)
+      webhook = await fathom.createWebhook({
+        destinationUrl: webhookUrl,
+        includeTranscript: true,
+        includeSummary: false, // We don't use summary
+        includeActionItems: false, // We don't use action items
+        includeCrmMatches: false, // We don't use CRM matches
+        triggeredFor: ["my_recordings"], // Required: array of recording types to trigger on
+      });
+    } catch (sdkError) {
+      // If SDK fails, use raw API call with snake_case (official API format)
+      console.log(
+        "⚠️ SDK webhook creation failed, trying raw API..."
+      );
+      const accessToken = await getValidAccessToken(userId);
+      const response = await fetch(
+        "https://api.fathom.ai/external/v1/webhooks",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            destination_url: webhookUrl,
+            include_transcript: true,
+            include_summary: false,
+            include_action_items: false,
+            include_crm_matches: false,
+            triggered_for: ["my_recordings"],
+          }),
+        }
+      );
 
-    // Store webhook ID
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Webhook creation failed: ${response.status} - ${errorText}`
+        );
+      }
+
+      webhook = await response.json();
+    }
+
+    // Store webhook ID and secret for signature verification
     await supabase
       .from("fathom_connections")
-      .update({ webhook_id: webhook.id })
+      .update({
+        webhook_id: webhook.id,
+        webhook_secret: webhook.secret || null, // Store secret for signature verification
+      })
       .eq("user_id", userId);
 
     res.send(`
@@ -444,13 +488,59 @@ app.post(
     }
 
     console.log(`📩 Webhook received for user: ${userId}`);
-    console.log(
-      "Meeting title:",
-      payload.title || payload.meeting_title
-    );
+    console.log("Payload keys:", Object.keys(payload)); // Debug: see what Fathom sends
+
+    // Extract meeting information from Fathom webhook payload
+    // Fathom may send data in different formats, so we check multiple possible fields
+    const meetingTitle =
+      payload.title ||
+      payload.meeting_title ||
+      payload.name ||
+      "Untitled Meeting";
+    const recordingId =
+      payload.recording_id ||
+      payload.recordingId ||
+      payload.id ||
+      null;
+    const meetingUrl =
+      payload.url || payload.recording_url || null;
+    const createdAt =
+      payload.created_at ||
+      payload.createdAt ||
+      payload.timestamp ||
+      new Date().toISOString();
+
+    console.log("Meeting info:", {
+      title: meetingTitle,
+      recording_id: recordingId,
+      url: meetingUrl,
+    });
 
     try {
+      // Check for duplicate if recording_id exists
+      if (recordingId) {
+        const { data: existingMeeting } = await supabase
+          .from("meeting_transcripts")
+          .select("recording_id")
+          .eq("user_id", userId)
+          .eq("recording_id", recordingId)
+          .maybeSingle();
+
+        if (existingMeeting) {
+          console.log(
+            `⏭️ Skipping duplicate meeting ${recordingId} for user: ${userId}`
+          );
+          return res.status(200).json({
+            success: true,
+            user_id: userId,
+            message: "Meeting already exists",
+            duplicate: true,
+          });
+        }
+      }
+
       // Normalize transcript format - ensure it's always an array
+      // Fathom sends transcript as an array when include_transcript: true
       let transcript = payload.transcript || [];
       if (
         transcript &&
@@ -469,21 +559,54 @@ app.post(
         }
       }
 
+      // Validate transcript is an array
+      if (!Array.isArray(transcript)) {
+        console.warn(
+          "⚠️ Transcript is not an array, converting to empty array"
+        );
+        transcript = [];
+      }
+
       // Insert into database (scoped to user_id)
-      await supabase.from("meeting_transcripts").insert({
+      // Store all available fields from Fathom webhook
+      const insertData = {
         user_id: userId,
-        title: payload.title || payload.meeting_title,
+        title: meetingTitle,
         transcript: transcript,
-        created_at:
-          payload.created_at || new Date().toISOString(),
-      });
+        created_at: createdAt,
+      };
+
+      // Add optional fields if available
+      if (recordingId) {
+        insertData.recording_id = recordingId;
+      }
+      if (meetingUrl) {
+        insertData.url = meetingUrl;
+      }
+      if (
+        payload.meeting_title &&
+        payload.meeting_title !== meetingTitle
+      ) {
+        insertData.meeting_title = payload.meeting_title;
+      }
+
+      await supabase
+        .from("meeting_transcripts")
+        .insert(insertData);
 
       console.log(
-        `✅ Meeting saved to database for user: ${userId}`
+        `✅ Meeting saved to database for user: ${userId}${
+          recordingId
+            ? ` (recording_id: ${recordingId})`
+            : ""
+        }`
       );
-      res
-        .status(200)
-        .json({ success: true, user_id: userId });
+      res.status(200).json({
+        success: true,
+        user_id: userId,
+        recording_id: recordingId,
+        transcript_items: transcript.length,
+      });
     } catch (error) {
       console.error(
         `❌ Webhook error for user ${userId}:`,
