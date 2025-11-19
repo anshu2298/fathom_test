@@ -61,6 +61,7 @@ const ensureFathomEnv = () => {
 };
 
 const persistConnectionTokens = async (
+  userId,
   token,
   refreshToken,
   expires
@@ -69,7 +70,7 @@ const persistConnectionTokens = async (
   const { error } = await supabase
     .from("fathom_connections")
     .upsert({
-      user_id: TEST_USER_ID,
+      user_id: userId,
       access_token: token,
       refresh_token: refreshToken,
       token_expires_at: expiresSeconds,
@@ -80,14 +81,16 @@ const persistConnectionTokens = async (
     throw error;
   }
 
-  console.log("✅ Tokens stored successfully");
+  console.log(
+    `✅ Tokens stored successfully for user: ${userId}`
+  );
 };
 
-const fetchConnectionRow = async () => {
+const fetchConnectionRow = async (userId) => {
   const { data, error } = await supabase
     .from("fathom_connections")
     .select("*")
-    .eq("user_id", TEST_USER_ID)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (error) {
@@ -98,7 +101,10 @@ const fetchConnectionRow = async () => {
   return data;
 };
 
-const refreshStoredAccessToken = async (connection) => {
+const refreshStoredAccessToken = async (
+  userId,
+  connection
+) => {
   ensureFathomEnv();
 
   if (!connection?.refresh_token) {
@@ -107,7 +113,9 @@ const refreshStoredAccessToken = async (connection) => {
     );
   }
 
-  console.log("🔄 Refreshing Fathom access token...");
+  console.log(
+    `🔄 Refreshing Fathom access token for user: ${userId}...`
+  );
 
   const response = await fetch(FATHOM_TOKEN_URL, {
     method: "POST",
@@ -141,6 +149,7 @@ const refreshStoredAccessToken = async (connection) => {
     TOKEN_REFRESH_BUFFER_SECONDS;
 
   await persistConnectionTokens(
+    userId,
     json.access_token,
     json.refresh_token ?? connection.refresh_token,
     expiresAt
@@ -149,9 +158,9 @@ const refreshStoredAccessToken = async (connection) => {
   return json.access_token;
 };
 
-const getValidAccessToken = async () => {
+const getValidAccessToken = async (userId) => {
   ensureFathomEnv();
-  const connection = await fetchConnectionRow();
+  const connection = await fetchConnectionRow(userId);
 
   if (!connection || !connection.access_token) {
     throw new Error(
@@ -169,22 +178,64 @@ const getValidAccessToken = async () => {
     return connection.access_token;
   }
 
-  return refreshStoredAccessToken(connection);
+  return refreshStoredAccessToken(userId, connection);
 };
 
-// For testing, use a hardcoded test user ID
-const TEST_USER_ID = "test-user-123";
+// Helper function to extract user_id from request
+const getUserId = (req) => {
+  // Try query parameter first, then header, then body
+  return (
+    req.query.user_id ||
+    req.headers["x-user-id"] ||
+    req.body?.user_id ||
+    null
+  );
+};
+
+// Helper function to validate user_id
+const validateUserId = (userId) => {
+  if (
+    !userId ||
+    typeof userId !== "string" ||
+    userId.trim() === ""
+  ) {
+    throw new Error(
+      "user_id is required and must be a non-empty string"
+    );
+  }
+  return userId.trim();
+};
 
 // ============================================
 // Route 1: Start OAuth
 // ============================================
 app.get("/api/fathom/connect", (req, res) => {
+  const userId = getUserId(req);
+
+  if (!userId) {
+    return res.status(400).json({
+      error:
+        "user_id is required. Provide it as a query parameter: ?user_id=your-user-id",
+    });
+  }
+
+  try {
+    validateUserId(userId);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  // Store user_id in state for callback
+  const state = Buffer.from(
+    JSON.stringify({ userId })
+  ).toString("base64");
+
   const authUrl = Fathom.getAuthorizationUrl({
     clientId: process.env.FATHOM_CLIENT_ID,
     clientSecret: process.env.FATHOM_CLIENT_SECRET,
     redirectUri: `${process.env.APP_URL}/api/fathom/callback`,
     scope: "public_api",
-    state: "test-state",
+    state: state,
   });
 
   res.redirect(authUrl);
@@ -194,15 +245,39 @@ app.get("/api/fathom/connect", (req, res) => {
 // Route 2: Handle OAuth Callback
 // ============================================
 app.get("/api/fathom/callback", async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
 
   if (!code) {
     return res.status(400).send("No authorization code");
   }
 
+  // Extract user_id from state
+  let userId;
   try {
+    if (state) {
+      const decodedState = JSON.parse(
+        Buffer.from(state, "base64").toString()
+      );
+      userId = decodedState.userId;
+    }
+  } catch (e) {
+    console.warn(
+      "Could not decode state, user_id may be missing"
+    );
+  }
+
+  if (!userId) {
+    return res.status(400).send(`
+      <h1>❌ Missing User ID</h1>
+      <p>User ID is required for OAuth callback. Please initiate the connection from the main page.</p>
+      <a href="/">Back to test page</a>
+    `);
+  }
+
+  try {
+    validateUserId(userId);
     console.log(
-      "🔐 Starting OAuth callback with code:",
+      `🔐 Starting OAuth callback for user: ${userId} with code:`,
       code
     );
 
@@ -223,10 +298,10 @@ app.get("/api/fathom/callback", async (req, res) => {
       process.env.FATHOM_CLIENT_ID?.substring(0, 10) + "..."
     );
 
-    // Token store for Supabase
+    // Token store for Supabase (scoped to user_id)
     const tokenStore = {
       get: async () => {
-        const data = await fetchConnectionRow();
+        const data = await fetchConnectionRow(userId);
 
         if (!data || !data.access_token) {
           console.log(
@@ -248,8 +323,11 @@ app.get("/api/fathom/callback", async (req, res) => {
       },
 
       set: async (token, refresh_token, expires) => {
-        console.log("💾 Storing tokens in database");
+        console.log(
+          `💾 Storing tokens in database for user: ${userId}`
+        );
         await persistConnectionTokens(
+          userId,
           token,
           refresh_token,
           expires
@@ -280,10 +358,10 @@ app.get("/api/fathom/callback", async (req, res) => {
       );
     }
 
-    // Create webhook
-    const webhookUrl = `${process.env.APP_URL}/api/fathom/webhook/${TEST_USER_ID}`;
+    // Create webhook with user-specific URL
+    const webhookUrl = `${process.env.APP_URL}/api/fathom/webhook/${userId}`;
     console.log(
-      "📡 Creating webhook with URL:",
+      `📡 Creating webhook for user ${userId} with URL:`,
       webhookUrl
     );
 
@@ -298,13 +376,14 @@ app.get("/api/fathom/callback", async (req, res) => {
     await supabase
       .from("fathom_connections")
       .update({ webhook_id: webhook.id })
-      .eq("user_id", TEST_USER_ID);
+      .eq("user_id", userId);
 
     res.send(`
       <h1>✅ Fathom Connected!</h1>
-      <p>Webhook created: ${webhook.id}</p>
-      <p>Webhook URL: ${webhookUrl}</p>
-      <a href="/">Back to test page</a>
+      <p><strong>User ID:</strong> ${userId}</p>
+      <p><strong>Webhook created:</strong> ${webhook.id}</p>
+      <p><strong>Webhook URL:</strong> ${webhookUrl}</p>
+      <a href="/?user_id=${userId}">Back to test page</a>
     `);
   } catch (error) {
     console.error("❌ OAuth error:", error);
@@ -328,12 +407,19 @@ app.get("/api/fathom/callback", async (req, res) => {
 
     res.status(500).send(`
       <h1>❌ Error Connecting to Fathom</h1>
+      <p><strong>User ID:</strong> ${
+        userId || "Unknown"
+      }</p>
       <p><strong>Error:</strong> ${error.message}</p>
       ${errorDetails}
       <p><strong>Server logs:</strong> Check server console for more information</p>
-      <a href="/">Back to test page</a>
+      <a href="/?user_id=${
+        userId || ""
+      }">Back to test page</a>
       <br><br>
-      <a href="/api/fathom/connect">Try connecting again</a>
+      <a href="/api/fathom/connect?user_id=${
+        userId || ""
+      }">Try connecting again</a>
     `);
   }
 });
@@ -347,22 +433,64 @@ app.post(
     const { userId } = req.params;
     const payload = req.body;
 
-    console.log("📩 Webhook received for user:", userId);
-    console.log("Meeting title:", payload.title);
+    try {
+      validateUserId(userId);
+    } catch (error) {
+      console.error(
+        "❌ Invalid user_id in webhook:",
+        error.message
+      );
+      return res.status(400).json({ error: error.message });
+    }
+
+    console.log(`📩 Webhook received for user: ${userId}`);
+    console.log(
+      "Meeting title:",
+      payload.title || payload.meeting_title
+    );
 
     try {
-      // Insert into database
+      // Normalize transcript format - ensure it's always an array
+      let transcript = payload.transcript || [];
+      if (
+        transcript &&
+        typeof transcript === "object" &&
+        !Array.isArray(transcript)
+      ) {
+        // If it's an object with a transcript property, extract it
+        if (
+          transcript.transcript &&
+          Array.isArray(transcript.transcript)
+        ) {
+          transcript = transcript.transcript;
+        } else {
+          // Otherwise, wrap it in an array or use empty array
+          transcript = [];
+        }
+      }
+
+      // Insert into database (scoped to user_id)
       await supabase.from("meeting_transcripts").insert({
         user_id: userId,
         title: payload.title || payload.meeting_title,
-        transcript: payload.transcript || [],
-        created_at: payload.created_at,
+        transcript: transcript,
+        summary: payload.summary || null,
+        action_items: payload.action_items || null,
+        created_at:
+          payload.created_at || new Date().toISOString(),
       });
 
-      console.log("✅ Meeting saved to database");
-      res.status(200).json({ success: true });
+      console.log(
+        `✅ Meeting saved to database for user: ${userId}`
+      );
+      res
+        .status(200)
+        .json({ success: true, user_id: userId });
     } catch (error) {
-      console.error("Webhook error:", error);
+      console.error(
+        `❌ Webhook error for user ${userId}:`,
+        error
+      );
       res.status(500).json({ error: error.message });
     }
   }
@@ -372,17 +500,32 @@ app.post(
 // Route 4: Get Meetings (for testing UI)
 // ============================================
 app.get("/api/fathom/meetings", async (req, res) => {
+  const userId = getUserId(req);
+
+  if (!userId) {
+    return res.status(400).json({
+      error:
+        "user_id is required. Provide it as a query parameter: ?user_id=your-user-id",
+    });
+  }
+
+  try {
+    validateUserId(userId);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
   const { data, error } = await supabase
     .from("meeting_transcripts")
     .select("*")
-    .eq("user_id", TEST_USER_ID)
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) {
     return res.status(500).json({ error: error.message });
   }
 
-  res.json({ meetings: data });
+  res.json({ meetings: data || [] });
 });
 
 // ============================================
@@ -390,8 +533,23 @@ app.get("/api/fathom/meetings", async (req, res) => {
 // ============================================
 
 app.post("/api/fathom/import", async (req, res) => {
+  const userId = getUserId(req);
+
+  if (!userId) {
+    return res.status(400).json({
+      error:
+        "user_id is required. Provide it as a query parameter, header (x-user-id), or in request body",
+    });
+  }
+
   try {
-    const accessToken = await getValidAccessToken();
+    validateUserId(userId);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  try {
+    const accessToken = await getValidAccessToken(userId);
     const fathom = new Fathom({
       security: {
         bearerAuth: accessToken,
@@ -401,9 +559,10 @@ app.post("/api/fathom/import", async (req, res) => {
     // Get all meetings with full details
     const iterator = await fathom.listMeetings({});
     const processed = [];
+    const skipped = [];
 
     console.log(
-      "🗂️ Starting import of all historical meetings..."
+      `🗂️ Starting import of all historical meetings for user: ${userId}...`
     );
 
     for await (const page of iterator) {
@@ -418,6 +577,28 @@ app.post("/api/fathom/import", async (req, res) => {
             "⚠️ Skipping meeting without recordingId:",
             meeting.title
           );
+          continue;
+        }
+
+        // Check if meeting already exists in database
+        const { data: existingMeeting } = await supabase
+          .from("meeting_transcripts")
+          .select("recording_id")
+          .eq("user_id", userId)
+          .eq("recording_id", meeting.recordingId)
+          .maybeSingle();
+
+        if (existingMeeting) {
+          console.log(
+            `⏭️ Skipping meeting ${meeting.recordingId} - already exists in database:`,
+            meeting.title
+          );
+          skipped.push({
+            recordingId: meeting.recordingId,
+            title: meeting.title,
+            createdAt: meeting.createdAt,
+            reason: "already_exists",
+          });
           continue;
         }
 
@@ -456,11 +637,11 @@ app.post("/api/fathom/import", async (req, res) => {
             `✅ Got transcript with ${transcript.length} items`
           );
 
-          // Insert directly into database with full meeting details
+          // Insert directly into database with full meeting details (scoped to user_id)
           await supabase
             .from("meeting_transcripts")
             .insert({
-              user_id: TEST_USER_ID,
+              user_id: userId,
               recording_id: meeting.recordingId,
               title: meeting.title,
               meeting_title:
@@ -484,32 +665,45 @@ app.post("/api/fathom/import", async (req, res) => {
           });
 
           console.log(
-            `✅ Saved meeting ${processed.length} to database`
+            `✅ Saved meeting ${processed.length} to database for user: ${userId}`
           );
         } catch (err) {
           console.error(
             `❌ Failed to process ${meeting.recordingId}:`,
             err.message
           );
+          skipped.push({
+            recordingId: meeting.recordingId,
+            title: meeting.title,
+            createdAt: meeting.createdAt,
+            reason: "error",
+            error: err.message,
+          });
         }
       }
     }
 
+    const totalProcessed = processed.length;
+    const totalSkipped = skipped.length;
+
     console.log(
-      `🎉 Finished importing ${processed.length} meetings`
+      `🎉 Finished importing for user: ${userId} - ${totalProcessed} new meetings imported, ${totalSkipped} skipped`
     );
 
-    if (processed.length === 0) {
+    if (totalProcessed === 0 && totalSkipped === 0) {
       return res.json({
-        requested: 0,
-        message: "No meetings found or all imports failed.",
+        imported: 0,
+        skipped: 0,
+        message: "No meetings found.",
       });
     }
 
     res.json({
-      requested: processed.length,
-      message: `Successfully imported ${processed.length} meeting(s) with transcripts.`,
+      imported: totalProcessed,
+      skipped: totalSkipped,
+      message: `Successfully imported ${totalProcessed} new meeting(s). ${totalSkipped} meeting(s) were skipped (already exist or errors).`,
       meetings: processed,
+      skipped_meetings: skipped,
     });
   } catch (error) {
     console.error("❌ Historical import error:", error);
@@ -525,15 +719,31 @@ app.post("/api/fathom/import", async (req, res) => {
 // Bonus: Check connection status
 // ============================================
 app.get("/api/fathom/status", async (req, res) => {
+  const userId = getUserId(req);
+
+  if (!userId) {
+    return res.status(400).json({
+      error:
+        "user_id is required. Provide it as a query parameter: ?user_id=your-user-id",
+    });
+  }
+
+  try {
+    validateUserId(userId);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
   const { data } = await supabase
     .from("fathom_connections")
     .select("*")
-    .eq("user_id", TEST_USER_ID)
-    .single();
+    .eq("user_id", userId)
+    .maybeSingle();
 
   res.json({
     connected: !!data,
     webhook_id: data?.webhook_id,
+    user_id: userId,
   });
 });
 
