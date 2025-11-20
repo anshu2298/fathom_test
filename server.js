@@ -523,23 +523,14 @@ app.get("/api/fathom/callback", async (req, res) => {
       );
     }
 
-    res.send(`
-      <h1>✅ Fathom Connected!</h1>
-      <p><strong>User ID:</strong> ${userId}</p>
-      <p><strong>Webhook created:</strong> ${webhook.id}</p>
-      <p><strong>Webhook URL:</strong> ${
-        webhook.url || webhookUrl
-      }</p>
-      <p><strong>Created at:</strong> ${
-        webhook.created_at || "Just now"
-      }</p>
-      <p><strong>Include Transcript:</strong> ${
-        webhook.include_transcript ||
-        webhook.includeTranscript ||
-        "Yes"
-      }</p>
-      <a href="/?user_id=${userId}">Back to test page</a>
-    `);
+    // Redirect to home page with success message
+    res.redirect(
+      `/?user_id=${encodeURIComponent(
+        userId
+      )}&connected=true&webhook_id=${encodeURIComponent(
+        webhook.id
+      )}`
+    );
   } catch (error) {
     console.error("❌ OAuth error:", error);
     console.error("Error stack:", error.stack);
