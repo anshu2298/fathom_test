@@ -395,10 +395,19 @@
         try {
           const userId = getUserIdFromUrl();
           const res = await fetch(`/api/fathom/status?user_id=${encodeURIComponent(userId)}`);
+          
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          }
+          
           const data = await res.json();
 
-          const statusEl =
-            document.getElementById("status");
+          const statusEl = document.getElementById("status");
+          
+          if (!statusEl) {
+            console.warn("Status element not found in DOM");
+            return;
+          }
 
           if (data.connected) {
             statusEl.className = "status connected";
@@ -418,17 +427,24 @@
             `;
           }
           
-          // Also check webhook status if connected
+          // Also check webhook status if connected (with error handling)
           if (data.connected && data.webhook_id) {
-            checkWebhookStatus();
+            // Call checkWebhookStatus but don't let it break the page if it fails
+            checkWebhookStatus().catch(err => {
+              console.warn("Webhook status check failed (non-critical):", err);
+              // Don't show error to user, just hide the webhook status section
+              document.getElementById("webhookStatus").style.display = "none";
+            });
           } else {
             document.getElementById("webhookStatus").style.display = "none";
           }
         } catch (error) {
           console.error("Status check error:", error);
           const userId = getUserIdFromUrl();
-          document.getElementById("status").innerHTML =
-            `⚠️ Error checking status (User ID: ${userId})`;
+          const statusEl = document.getElementById("status");
+          if (statusEl) {
+            statusEl.innerHTML = `⚠️ Error checking status (User ID: ${userId})`;
+          }
         }
       }
 
@@ -437,10 +453,20 @@
         try {
           const userId = getUserIdFromUrl();
           const res = await fetch(`/api/fathom/webhook-status?user_id=${encodeURIComponent(userId)}`);
+          
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          }
+          
           const data = await res.json();
 
           const webhookStatusEl = document.getElementById("webhookStatus");
           const webhookDetailsEl = document.getElementById("webhookDetails");
+          
+          if (!webhookStatusEl || !webhookDetailsEl) {
+            console.warn("Webhook status elements not found in DOM");
+            return;
+          }
 
           if (data.webhook_exists && data.webhook_details) {
             webhookStatusEl.style.display = "block";
@@ -469,10 +495,17 @@
           console.error("Webhook status check error:", error);
           const webhookStatusEl = document.getElementById("webhookStatus");
           const webhookDetailsEl = document.getElementById("webhookDetails");
-          webhookStatusEl.style.display = "block";
-          webhookDetailsEl.innerHTML = `
-            <div style="color: #ef4444;">⚠️ Error checking webhook status: ${error.message}</div>
-          `;
+          
+          // Only update if elements exist
+          if (webhookStatusEl && webhookDetailsEl) {
+            webhookStatusEl.style.display = "block";
+            webhookDetailsEl.innerHTML = `
+              <div style="color: #ef4444;">⚠️ Error checking webhook status: ${error.message}</div>
+            `;
+          }
+          
+          // Re-throw so caller can handle it
+          throw error;
         }
       }
 
@@ -764,12 +797,48 @@
         }
       }
 
-      // Auto-load on page load
-      checkStatus();
-      loadMeetings();
+      // Show success message if returning from OAuth
+      (function showSuccessMessage() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('connected') === 'true') {
+          const webhookId = params.get('webhook_id');
+          const userId = getUserIdFromUrl();
+          
+          // Show success alert
+          setTimeout(() => {
+            alert(`✅ Fathom Connected Successfully!\n\nUser ID: ${userId}\nWebhook ID: ${webhookId || 'N/A'}\n\nYour meetings will now be automatically synced.`);
+          }, 500);
+          
+          // Clean up URL parameters
+          const cleanUrl = window.location.pathname + (userId ? `?user_id=${encodeURIComponent(userId)}` : '');
+          window.history.replaceState({}, '', cleanUrl);
+        }
+      })();
+
+      // Auto-load on page load with error handling
+      (async function initializePage() {
+        try {
+          await Promise.all([
+            checkStatus().catch(err => {
+              console.error("Failed to check status:", err);
+              document.getElementById("status").innerHTML = 
+                `⚠️ Error checking connection status`;
+            }),
+            loadMeetings().catch(err => {
+              console.error("Failed to load meetings:", err);
+            })
+          ]);
+        } catch (error) {
+          console.error("Page initialization error:", error);
+        }
+      })();
 
       // Auto-refresh meetings every 30 seconds
-      setInterval(loadMeetings, 30000);
+      setInterval(() => {
+        loadMeetings().catch(err => {
+          console.error("Failed to refresh meetings:", err);
+        });
+      }, 30000);
     </script>
   </body>
 </html>
