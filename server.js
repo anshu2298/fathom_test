@@ -492,35 +492,68 @@ app.get("/api/fathom/callback", async (req, res) => {
     );
 
     // Verify webhook exists in Fathom by fetching it
+    // Note: Fathom may need a few seconds before webhook is available via GET
+    // So we add a small delay and retry mechanism
     try {
       const accessToken = await getValidAccessToken(userId);
-      const verifyResponse = await fetch(
-        `https://api.fathom.ai/external/v1/webhooks/${webhook.id}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
+
+      // Wait 2 seconds before first verification attempt (Fathom needs time to process)
+      await new Promise((resolve) =>
+        setTimeout(resolve, 2000)
       );
 
-      if (verifyResponse.ok) {
-        const verifiedWebhook = await verifyResponse.json();
-        console.log("✅ Webhook verified in Fathom:", {
-          id: verifiedWebhook.id,
-          url: verifiedWebhook.url,
-          active: true,
-        });
-      } else {
-        console.warn(
-          "⚠️ Could not verify webhook in Fathom:",
-          verifyResponse.status
+      let verified = false;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (!verified && attempts < maxAttempts) {
+        attempts++;
+        const verifyResponse = await fetch(
+          `https://api.fathom.ai/external/v1/webhooks/${webhook.id}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
         );
+
+        if (verifyResponse.ok) {
+          const verifiedWebhook =
+            await verifyResponse.json();
+          console.log("✅ Webhook verified in Fathom:", {
+            id: verifiedWebhook.id,
+            url: verifiedWebhook.url,
+            active: true,
+            attempts: attempts,
+          });
+          verified = true;
+        } else {
+          if (attempts < maxAttempts) {
+            console.log(
+              `⏳ Webhook verification attempt ${attempts} failed (${verifyResponse.status}), retrying in 2 seconds...`
+            );
+            await new Promise((resolve) =>
+              setTimeout(resolve, 2000)
+            );
+          } else {
+            console.warn(
+              `⚠️ Could not verify webhook in Fathom after ${maxAttempts} attempts:`,
+              verifyResponse.status
+            );
+            console.warn(
+              "⚠️ This is non-critical - webhook was created successfully, it may just need more time to be available"
+            );
+          }
+        }
       }
     } catch (verifyError) {
       console.warn(
         "⚠️ Webhook verification failed (non-critical):",
         verifyError.message
+      );
+      console.warn(
+        "⚠️ Webhook was created successfully, verification is just a confirmation step"
       );
     }
 
@@ -1023,7 +1056,9 @@ async function ensureWebhookExists(userId) {
     const { data: connection, error: dbError } =
       await supabase
         .from("fathom_connections")
-        .select("webhook_id, webhook_secret")
+        .select(
+          "webhook_id, webhook_secret, webhook_created_at"
+        )
         .eq("user_id", userId)
         .maybeSingle();
 
@@ -1034,26 +1069,104 @@ async function ensureWebhookExists(userId) {
       };
     }
 
-    // Verify webhook exists in Fathom
+    // Check if webhook was just created (within last 30 seconds)
+    // If so, don't immediately recreate - give Fathom time to process it
+    if (connection.webhook_created_at) {
+      const createdTime = new Date(
+        connection.webhook_created_at
+      ).getTime();
+      const now = Date.now();
+      const timeSinceCreation = now - createdTime;
+
+      if (timeSinceCreation < 30000) {
+        // Less than 30 seconds
+        console.log(
+          `⏳ Webhook ${
+            connection.webhook_id
+          } was created ${Math.round(
+            timeSinceCreation / 1000
+          )}s ago, waiting before verification...`
+        );
+        // Wait a bit and then verify
+        await new Promise((resolve) =>
+          setTimeout(resolve, 3000)
+        );
+      }
+    }
+
+    // Verify webhook exists in Fathom with retry logic
     try {
       const accessToken = await getValidAccessToken(userId);
-      const response = await fetch(
-        `https://api.fathom.ai/external/v1/webhooks/${connection.webhook_id}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
+      let response;
+      let attempts = 0;
+      const maxAttempts = 2;
 
-      if (response.ok) {
-        const webhook = await response.json();
-        return { exists: true, webhook, verified: true };
-      } else if (response.status === 404) {
+      // Try to fetch webhook with retries
+      while (attempts < maxAttempts) {
+        attempts++;
+        response = await fetch(
+          `https://api.fathom.ai/external/v1/webhooks/${connection.webhook_id}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const webhook = await response.json();
+          return { exists: true, webhook, verified: true };
+        } else if (
+          response.status === 404 &&
+          attempts < maxAttempts
+        ) {
+          // Wait before retry (webhook might still be processing)
+          console.log(
+            `⏳ Webhook ${connection.webhook_id} not found (attempt ${attempts}), retrying in 3 seconds...`
+          );
+          await new Promise((resolve) =>
+            setTimeout(resolve, 3000)
+          );
+        } else {
+          break; // Exit loop if not 404 or max attempts reached
+        }
+      }
+
+      // Only recreate if we got a 404 after retries
+      if (response.status === 404) {
+        // Double-check: if webhook was created very recently, don't recreate
+        if (connection.webhook_created_at) {
+          const createdTime = new Date(
+            connection.webhook_created_at
+          ).getTime();
+          const now = Date.now();
+          const timeSinceCreation = now - createdTime;
+
+          if (timeSinceCreation < 60000) {
+            // Less than 1 minute
+            console.log(
+              `⏳ Webhook ${
+                connection.webhook_id
+              } was created ${Math.round(
+                timeSinceCreation / 1000
+              )}s ago.`
+            );
+            console.log(
+              `⏳ Fathom may still be processing it. Will not recreate yet.`
+            );
+            return {
+              exists: false,
+              error:
+                "Webhook not yet available in Fathom (may still be processing)",
+              webhook_id: connection.webhook_id,
+            };
+          }
+        }
+
         // Webhook was deleted, need to recreate
         console.log(
-          `⚠️ Webhook ${connection.webhook_id} not found in Fathom, recreating...`
+          `⚠️ Webhook ${connection.webhook_id} not found in Fathom after retries, recreating...`
         );
 
         const webhookUrl = `${process.env.APP_URL}/api/fathom/webhook/${userId}`;
