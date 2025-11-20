@@ -5,6 +5,13 @@ import dotenv from "dotenv";
 import crypto from "crypto";
 dotenv.config();
 const app = express();
+app.use(
+  "/api/fathom/webhook/:userId",
+  express.raw({
+    type: "application/json",
+    limit: "50mb",
+  })
+);
 app.use(express.json());
 app.use(express.static("public"));
 
@@ -27,11 +34,20 @@ app.use("/api/fathom/webhook/:userId", (req, res, next) => {
     `📦 Headers:`,
     JSON.stringify(req.headers, null, 2)
   );
-  console.log(`📄 Body keys:`, Object.keys(req.body || {}));
-  console.log(
-    `📄 Body preview:`,
-    JSON.stringify(req.body).substring(0, 500)
-  );
+  if (Buffer.isBuffer(req.body)) {
+    console.log(
+      `📄 Raw body (Buffer) received, size: ${req.body.length} bytes`
+    );
+  } else {
+    console.log(
+      "📄 Body keys:",
+      Object.keys(req.body || {})
+    );
+    console.log(
+      "📄 Body preview:",
+      JSON.stringify(req.body).substring(0, 500)
+    );
+  }
   console.log("=".repeat(80));
 
   // Attach request ID to request for later use
@@ -668,7 +684,14 @@ app.post(
   async (req, res) => {
     const requestId = req.webhookRequestId || "unknown";
     const { userId } = req.params;
-    const payload = req.body;
+    let payload;
+
+    try {
+      payload = JSON.parse(req.body.toString("utf8")); // <-- required
+    } catch (err) {
+      console.error("❌ Failed to parse JSON body:", err);
+      return res.status(400).send("Invalid JSON");
+    }
     const startTime = Date.now();
 
     // CRITICAL: Respond quickly to avoid webhook timeouts
