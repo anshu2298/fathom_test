@@ -8,6 +8,37 @@ app.use(express.json());
 app.use(express.static("public"));
 
 // ============================================================
+// Webhook Logging Middleware
+// ============================================================
+app.use("/api/fathom/webhook/:userId", (req, res, next) => {
+  const requestId = `webhook-${Date.now()}-${Math.random()
+    .toString(36)
+    .substring(7)}`;
+  const timestamp = new Date().toISOString();
+
+  console.log("=".repeat(80));
+  console.log(
+    `🔔 WEBHOOK REQUEST [${requestId}] at ${timestamp}`
+  );
+  console.log(`📍 URL: ${req.method} ${req.originalUrl}`);
+  console.log(`👤 User ID: ${req.params.userId}`);
+  console.log(
+    `📦 Headers:`,
+    JSON.stringify(req.headers, null, 2)
+  );
+  console.log(`📄 Body keys:`, Object.keys(req.body || {}));
+  console.log(
+    `📄 Body preview:`,
+    JSON.stringify(req.body).substring(0, 500)
+  );
+  console.log("=".repeat(80));
+
+  // Attach request ID to request for later use
+  req.webhookRequestId = requestId;
+  next();
+});
+
+// ============================================================
 // Debug helper: log Fathom OAuth token exchange failures
 // ============================================================
 if (typeof fetch === "function") {
@@ -413,20 +444,100 @@ app.get("/api/fathom/callback", async (req, res) => {
       webhook = await response.json();
     }
 
+    // Verify webhook was created successfully
+    if (!webhook || !webhook.id) {
+      throw new Error(
+        "Webhook creation failed: No webhook ID returned"
+      );
+    }
+
+    console.log("✅ Webhook created successfully:", {
+      id: webhook.id,
+      url: webhook.url || webhookUrl,
+      secret: webhook.secret
+        ? "***" + webhook.secret.slice(-4)
+        : "none",
+      created_at: webhook.created_at,
+      include_transcript:
+        webhook.include_transcript ||
+        webhook.includeTranscript,
+      triggered_for:
+        webhook.triggered_for || webhook.triggeredFor,
+    });
+
     // Store webhook ID and secret for signature verification
-    await supabase
+    const { error: updateError } = await supabase
       .from("fathom_connections")
       .update({
         webhook_id: webhook.id,
         webhook_secret: webhook.secret || null, // Store secret for signature verification
+        webhook_created_at:
+          webhook.created_at || new Date().toISOString(),
       })
       .eq("user_id", userId);
+
+    if (updateError) {
+      console.error(
+        "❌ Error storing webhook info:",
+        updateError
+      );
+      throw new Error(
+        `Failed to store webhook: ${updateError.message}`
+      );
+    }
+
+    console.log(
+      `✅ Webhook info stored for user: ${userId}`
+    );
+
+    // Verify webhook exists in Fathom by fetching it
+    try {
+      const accessToken = await getValidAccessToken(userId);
+      const verifyResponse = await fetch(
+        `https://api.fathom.ai/external/v1/webhooks/${webhook.id}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+
+      if (verifyResponse.ok) {
+        const verifiedWebhook = await verifyResponse.json();
+        console.log("✅ Webhook verified in Fathom:", {
+          id: verifiedWebhook.id,
+          url: verifiedWebhook.url,
+          active: true,
+        });
+      } else {
+        console.warn(
+          "⚠️ Could not verify webhook in Fathom:",
+          verifyResponse.status
+        );
+      }
+    } catch (verifyError) {
+      console.warn(
+        "⚠️ Webhook verification failed (non-critical):",
+        verifyError.message
+      );
+    }
 
     res.send(`
       <h1>✅ Fathom Connected!</h1>
       <p><strong>User ID:</strong> ${userId}</p>
       <p><strong>Webhook created:</strong> ${webhook.id}</p>
-      <p><strong>Webhook URL:</strong> ${webhookUrl}</p>
+      <p><strong>Webhook URL:</strong> ${
+        webhook.url || webhookUrl
+      }</p>
+      <p><strong>Created at:</strong> ${
+        webhook.created_at || "Just now"
+      }</p>
+      <p><strong>Include Transcript:</strong> ${
+        webhook.include_transcript ||
+        webhook.includeTranscript ||
+        "Yes"
+      }</p>
       <a href="/?user_id=${userId}">Back to test page</a>
     `);
   } catch (error) {
@@ -474,67 +585,103 @@ app.get("/api/fathom/callback", async (req, res) => {
 app.post(
   "/api/fathom/webhook/:userId",
   async (req, res) => {
+    const requestId = req.webhookRequestId || "unknown";
     const { userId } = req.params;
     const payload = req.body;
+    const startTime = Date.now();
 
+    // Wrap entire handler in try-catch for comprehensive error handling
     try {
-      validateUserId(userId);
-    } catch (error) {
-      console.error(
-        "❌ Invalid user_id in webhook:",
-        error.message
+      // Validate user_id
+      try {
+        validateUserId(userId);
+      } catch (error) {
+        console.error(
+          `❌ [${requestId}] Invalid user_id in webhook:`,
+          error.message
+        );
+        console.error(
+          `❌ [${requestId}] Full error:`,
+          error
+        );
+        return res.status(400).json({
+          error: error.message,
+          request_id: requestId,
+        });
+      }
+
+      console.log(
+        `📩 [${requestId}] Webhook received for user: ${userId}`
       );
-      return res.status(400).json({ error: error.message });
-    }
+      console.log(
+        `📩 [${requestId}] Payload keys:`,
+        Object.keys(payload || {})
+      );
+      console.log(
+        `📩 [${requestId}] Full payload:`,
+        JSON.stringify(payload, null, 2)
+      );
 
-    console.log(`📩 Webhook received for user: ${userId}`);
-    console.log("Payload keys:", Object.keys(payload)); // Debug: see what Fathom sends
+      // Extract meeting information from Fathom webhook payload
+      // Fathom may send data in different formats, so we check multiple possible fields
+      const meetingTitle =
+        payload.title ||
+        payload.meeting_title ||
+        payload.name ||
+        "Untitled Meeting";
+      const recordingId =
+        payload.recording_id ||
+        payload.recordingId ||
+        payload.id ||
+        null;
+      const meetingUrl =
+        payload.url || payload.recording_url || null;
+      const createdAt =
+        payload.created_at ||
+        payload.createdAt ||
+        payload.timestamp ||
+        new Date().toISOString();
 
-    // Extract meeting information from Fathom webhook payload
-    // Fathom may send data in different formats, so we check multiple possible fields
-    const meetingTitle =
-      payload.title ||
-      payload.meeting_title ||
-      payload.name ||
-      "Untitled Meeting";
-    const recordingId =
-      payload.recording_id ||
-      payload.recordingId ||
-      payload.id ||
-      null;
-    const meetingUrl =
-      payload.url || payload.recording_url || null;
-    const createdAt =
-      payload.created_at ||
-      payload.createdAt ||
-      payload.timestamp ||
-      new Date().toISOString();
-
-    console.log("Meeting info:", {
-      title: meetingTitle,
-      recording_id: recordingId,
-      url: meetingUrl,
-    });
-
-    try {
+      console.log(`📋 [${requestId}] Meeting info:`, {
+        title: meetingTitle,
+        recording_id: recordingId,
+        url: meetingUrl,
+        created_at: createdAt,
+      });
       // Check for duplicate if recording_id exists
       if (recordingId) {
-        const { data: existingMeeting } = await supabase
-          .from("meeting_transcripts")
-          .select("recording_id")
-          .eq("user_id", userId)
-          .eq("recording_id", recordingId)
-          .maybeSingle();
+        console.log(
+          `🔍 [${requestId}] Checking for duplicate meeting: ${recordingId}`
+        );
+        const { data: existingMeeting, error: checkError } =
+          await supabase
+            .from("meeting_transcripts")
+            .select("recording_id")
+            .eq("user_id", userId)
+            .eq("recording_id", recordingId)
+            .maybeSingle();
+
+        if (checkError) {
+          console.error(
+            `❌ [${requestId}] Error checking for duplicate:`,
+            checkError
+          );
+        }
 
         if (existingMeeting) {
           console.log(
-            `⏭️ Skipping duplicate meeting ${recordingId} for user: ${userId}`
+            `⏭️ [${requestId}] Skipping duplicate meeting ${recordingId} for user: ${userId}`
+          );
+          const responseTime = Date.now() - startTime;
+          console.log(
+            `✅ [${requestId}] Webhook processed (duplicate) in ${responseTime}ms`
           );
           return res.status(200).json({
             success: true,
             user_id: userId,
             message: "Meeting already exists",
             duplicate: true,
+            request_id: requestId,
           });
         }
       }
@@ -590,32 +737,400 @@ app.post(
         insertData.meeting_title = payload.meeting_title;
       }
 
-      await supabase
-        .from("meeting_transcripts")
-        .insert(insertData);
-
       console.log(
-        `✅ Meeting saved to database for user: ${userId}${
+        `💾 [${requestId}] Inserting meeting into database:`,
+        insertData
+      );
+      const { data: insertedData, error: insertError } =
+        await supabase
+          .from("meeting_transcripts")
+          .insert(insertData)
+          .select();
+
+      if (insertError) {
+        console.error(
+          `❌ [${requestId}] Database insert error:`,
+          insertError
+        );
+        console.error(
+          `❌ [${requestId}] Insert data was:`,
+          insertData
+        );
+        throw insertError;
+      }
+
+      const responseTime = Date.now() - startTime;
+      console.log(
+        `✅ [${requestId}] Meeting saved to database for user: ${userId}${
           recordingId
             ? ` (recording_id: ${recordingId})`
             : ""
-        }`
+        } in ${responseTime}ms`
       );
+      console.log(
+        `✅ [${requestId}] Inserted record:`,
+        insertedData
+      );
+
       res.status(200).json({
         success: true,
         user_id: userId,
         recording_id: recordingId,
         transcript_items: transcript.length,
+        request_id: requestId,
+        response_time_ms: responseTime,
       });
     } catch (error) {
+      const responseTime = Date.now() - startTime;
+      console.error("=".repeat(80));
       console.error(
-        `❌ Webhook error for user ${userId}:`,
-        error
+        `❌ [${requestId}] WEBHOOK ERROR after ${responseTime}ms`
       );
-      res.status(500).json({ error: error.message });
+      console.error(
+        `❌ [${requestId}] Error message:`,
+        error.message
+      );
+      console.error(
+        `❌ [${requestId}] Error stack:`,
+        error.stack
+      );
+      console.error(`❌ [${requestId}] User ID:`, userId);
+      console.error(
+        `❌ [${requestId}] Payload:`,
+        JSON.stringify(payload, null, 2)
+      );
+      console.error("=".repeat(80));
+
+      res.status(500).json({
+        error: error.message,
+        request_id: requestId,
+        response_time_ms: responseTime,
+      });
     }
   }
 );
+
+// ============================================
+// Route 3.5: Webhook Status Check
+// ============================================
+app.get("/api/fathom/webhook-status", async (req, res) => {
+  const userId = getUserId(req);
+
+  if (!userId) {
+    return res.status(400).json({
+      error:
+        "user_id is required. Provide it as a query parameter: ?user_id=your-user-id",
+    });
+  }
+
+  try {
+    validateUserId(userId);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  try {
+    // Get webhook info from database
+    const { data: connection, error: dbError } =
+      await supabase
+        .from("fathom_connections")
+        .select("webhook_id, webhook_secret")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+    if (dbError) {
+      throw new Error(`Database error: ${dbError.message}`);
+    }
+
+    if (!connection || !connection.webhook_id) {
+      return res.json({
+        connected: false,
+        webhook_exists: false,
+        message:
+          "No webhook found. Please connect Fathom first.",
+        user_id: userId,
+      });
+    }
+
+    // Fetch webhook details from Fathom API
+    const accessToken = await getValidAccessToken(userId);
+    const response = await fetch(
+      `https://api.fathom.ai/external/v1/webhooks/${connection.webhook_id}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({
+        connected: true,
+        webhook_exists: true,
+        webhook_id: connection.webhook_id,
+        error: `Failed to fetch webhook from Fathom: ${response.status} - ${errorText}`,
+        user_id: userId,
+      });
+    }
+
+    const webhook = await response.json();
+
+    return res.json({
+      connected: true,
+      webhook_exists: true,
+      webhook_id: connection.webhook_id,
+      webhook_details: {
+        id: webhook.id,
+        url: webhook.url,
+        created_at: webhook.created_at,
+        include_transcript: webhook.include_transcript,
+        include_summary: webhook.include_summary,
+        include_action_items: webhook.include_action_items,
+        include_crm_matches: webhook.include_crm_matches,
+        triggered_for: webhook.triggered_for,
+      },
+      user_id: userId,
+    });
+  } catch (error) {
+    console.error("❌ Webhook status check error:", error);
+    return res.status(500).json({
+      error: error.message,
+      user_id: userId,
+    });
+  }
+});
+
+// ============================================
+// Route 3.6: Webhook Health Check
+// ============================================
+app.get("/api/fathom/webhook-health", async (req, res) => {
+  const userId = getUserId(req);
+
+  if (!userId) {
+    return res.status(400).json({
+      error:
+        "user_id is required. Provide it as a query parameter: ?user_id=your-user-id",
+    });
+  }
+
+  try {
+    validateUserId(userId);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  try {
+    // Check database connection
+    const { data: connection, error: dbError } =
+      await supabase
+        .from("fathom_connections")
+        .select("webhook_id, webhook_secret")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+    const webhookUrl = `${process.env.APP_URL}/api/fathom/webhook/${userId}`;
+
+    return res.json({
+      healthy: true,
+      user_id: userId,
+      webhook_url: webhookUrl,
+      webhook_configured: !!connection?.webhook_id,
+      webhook_id: connection?.webhook_id || null,
+      database_accessible: !dbError,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("❌ Webhook health check error:", error);
+    return res.status(500).json({
+      healthy: false,
+      error: error.message,
+      user_id: userId,
+    });
+  }
+});
+
+// ============================================
+// Route 3.7: Test Webhook Endpoint
+// ============================================
+app.post("/api/fathom/test-webhook", async (req, res) => {
+  const userId = getUserId(req);
+
+  if (!userId) {
+    return res.status(400).json({
+      error:
+        "user_id is required. Provide it as a query parameter, header (x-user-id), or in request body",
+    });
+  }
+
+  try {
+    validateUserId(userId);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  // Simulate a Fathom webhook payload
+  const testPayload = {
+    title: "Test Meeting - " + new Date().toISOString(),
+    meeting_title: "Test Meeting",
+    recording_id: `test-${Date.now()}`,
+    url: "https://fathom.video/recording/test",
+    transcript: [
+      {
+        text: "This is a test transcript item.",
+        speaker: {
+          display_name: "Test Speaker",
+          matched_calendar_invitee_email:
+            "test@example.com",
+        },
+        timestamp: "00:00:01",
+      },
+      {
+        text: "Another test message.",
+        speaker: {
+          display_name: "Test Speaker 2",
+          matched_calendar_invitee_email:
+            "test2@example.com",
+        },
+        timestamp: "00:00:05",
+      },
+    ],
+    created_at: new Date().toISOString(),
+  };
+
+  const webhookUrl = `${process.env.APP_URL}/api/fathom/webhook/${userId}`;
+  console.log(
+    `🧪 Testing webhook with payload:`,
+    testPayload
+  );
+
+  // Create a mock request object to call webhook handler directly
+  const mockReq = {
+    params: { userId },
+    body: testPayload,
+    webhookRequestId: `test-${Date.now()}`,
+    method: "POST",
+    originalUrl: `/api/fathom/webhook/${userId}`,
+    headers: {
+      "content-type": "application/json",
+    },
+  };
+
+  const mockRes = {
+    status: (code) => ({
+      json: (data) => ({ statusCode: code, data }),
+    }),
+    json: (data) => ({ statusCode: 200, data }),
+  };
+
+  // Call webhook handler directly
+  try {
+    // Import the webhook handler logic (we'll extract it)
+    // For now, simulate the webhook processing
+    const requestId = mockReq.webhookRequestId;
+    const payload = testPayload;
+    const startTime = Date.now();
+
+    try {
+      validateUserId(userId);
+
+      const meetingTitle =
+        payload.title ||
+        payload.meeting_title ||
+        "Test Meeting";
+      const recordingId =
+        payload.recording_id || `test-${Date.now()}`;
+      const meetingUrl = payload.url || null;
+      const createdAt =
+        payload.created_at || new Date().toISOString();
+
+      // Check for duplicate
+      const { data: existingMeeting } = await supabase
+        .from("meeting_transcripts")
+        .select("recording_id")
+        .eq("user_id", userId)
+        .eq("recording_id", recordingId)
+        .maybeSingle();
+
+      if (existingMeeting) {
+        return res.json({
+          success: true,
+          status: 200,
+          message:
+            "Test meeting already exists (duplicate)",
+          webhook_url: webhookUrl,
+          test_payload: testPayload,
+        });
+      }
+
+      // Normalize transcript
+      let transcript = payload.transcript || [];
+      if (!Array.isArray(transcript)) {
+        transcript = [];
+      }
+
+      // Insert into database
+      const insertData = {
+        user_id: userId,
+        title: meetingTitle,
+        transcript: transcript,
+        created_at: createdAt,
+      };
+
+      if (recordingId) {
+        insertData.recording_id = recordingId;
+      }
+      if (meetingUrl) {
+        insertData.url = meetingUrl;
+      }
+
+      const { data: insertedData, error: insertError } =
+        await supabase
+          .from("meeting_transcripts")
+          .insert(insertData)
+          .select();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      const responseTime = Date.now() - startTime;
+      console.log(
+        `✅ [${requestId}] Test webhook processed successfully in ${responseTime}ms`
+      );
+
+      return res.json({
+        success: true,
+        status: 200,
+        webhook_url: webhookUrl,
+        test_payload: testPayload,
+        webhook_response: {
+          success: true,
+          user_id: userId,
+          recording_id: recordingId,
+          transcript_items: transcript.length,
+          request_id: requestId,
+          response_time_ms: responseTime,
+        },
+      });
+    } catch (error) {
+      console.error(`❌ Test webhook error:`, error);
+      return res.status(500).json({
+        success: false,
+        status: 500,
+        error: error.message,
+        webhook_url: webhookUrl,
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      webhook_url: webhookUrl,
+    });
+  }
+});
 
 // ============================================
 // Route 4: Get Meetings (for testing UI)

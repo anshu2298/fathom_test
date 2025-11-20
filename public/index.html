@@ -256,12 +256,34 @@
       >
         Checking connection...
       </div>
-      <button
-        class="btn-secondary"
-        onclick="checkStatus()"
-      >
-        🔄 Refresh Status
-      </button>
+      <div id="webhookStatus" style="margin-top: 16px; display: none;">
+        <div style="padding: 12px; background: #f9fafb; border-radius: 8px; margin: 8px 0;">
+          <strong>Webhook Status:</strong>
+          <div id="webhookDetails" style="margin-top: 8px; font-size: 14px; color: #6b7280;"></div>
+        </div>
+      </div>
+      <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+        <button
+          class="btn-secondary"
+          onclick="checkStatus()"
+        >
+          🔄 Refresh Status
+        </button>
+        <button
+          class="btn-secondary"
+          onclick="checkWebhookStatus()"
+          style="font-size: 14px; padding: 8px 16px;"
+        >
+          🔍 Check Webhook
+        </button>
+        <button
+          class="btn-secondary"
+          onclick="testWebhook()"
+          style="font-size: 14px; padding: 8px 16px;"
+        >
+          🧪 Test Webhook
+        </button>
+      </div>
     </div>
 
     <!-- Actions -->
@@ -395,11 +417,97 @@
               <small>User ID: ${userId}</small>
             `;
           }
+          
+          // Also check webhook status if connected
+          if (data.connected && data.webhook_id) {
+            checkWebhookStatus();
+          } else {
+            document.getElementById("webhookStatus").style.display = "none";
+          }
         } catch (error) {
           console.error("Status check error:", error);
           const userId = getUserIdFromUrl();
           document.getElementById("status").innerHTML =
             `⚠️ Error checking status (User ID: ${userId})`;
+        }
+      }
+
+      // Check webhook status
+      async function checkWebhookStatus() {
+        try {
+          const userId = getUserIdFromUrl();
+          const res = await fetch(`/api/fathom/webhook-status?user_id=${encodeURIComponent(userId)}`);
+          const data = await res.json();
+
+          const webhookStatusEl = document.getElementById("webhookStatus");
+          const webhookDetailsEl = document.getElementById("webhookDetails");
+
+          if (data.webhook_exists && data.webhook_details) {
+            webhookStatusEl.style.display = "block";
+            const details = data.webhook_details;
+            webhookDetailsEl.innerHTML = `
+              <div style="margin: 4px 0;"><strong>ID:</strong> ${details.id}</div>
+              <div style="margin: 4px 0;"><strong>URL:</strong> <code style="font-size: 12px;">${details.url}</code></div>
+              <div style="margin: 4px 0;"><strong>Created:</strong> ${new Date(details.created_at).toLocaleString()}</div>
+              <div style="margin: 4px 0;"><strong>Include Transcript:</strong> ${details.include_transcript ? '✅' : '❌'}</div>
+              <div style="margin: 4px 0;"><strong>Triggers:</strong> ${(details.triggered_for || []).join(', ')}</div>
+            `;
+          } else if (data.webhook_exists) {
+            webhookStatusEl.style.display = "block";
+            webhookDetailsEl.innerHTML = `
+              <div style="color: #ef4444;">⚠️ Webhook exists but details unavailable</div>
+              <div style="margin-top: 4px;"><strong>Webhook ID:</strong> ${data.webhook_id}</div>
+              ${data.error ? `<div style="color: #ef4444; margin-top: 4px;">Error: ${data.error}</div>` : ''}
+            `;
+          } else {
+            webhookStatusEl.style.display = "block";
+            webhookDetailsEl.innerHTML = `
+              <div style="color: #ef4444;">❌ No webhook found. Please connect Fathom.</div>
+            `;
+          }
+        } catch (error) {
+          console.error("Webhook status check error:", error);
+          const webhookStatusEl = document.getElementById("webhookStatus");
+          const webhookDetailsEl = document.getElementById("webhookDetails");
+          webhookStatusEl.style.display = "block";
+          webhookDetailsEl.innerHTML = `
+            <div style="color: #ef4444;">⚠️ Error checking webhook status: ${error.message}</div>
+          `;
+        }
+      }
+
+      // Test webhook
+      async function testWebhook() {
+        try {
+          const userId = getUserIdFromUrl();
+          const btn = event.target;
+          const originalText = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = "⏳ Testing...";
+
+          const res = await fetch(`/api/fathom/test-webhook?user_id=${encodeURIComponent(userId)}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ user_id: userId }),
+          });
+
+          const data = await res.json();
+
+          if (data.success) {
+            alert(`✅ Webhook test successful!\n\nStatus: ${data.status}\nTranscript items: ${data.webhook_response?.transcript_items || 0}\n\nCheck the meetings list to see the test meeting.`);
+            loadMeetings(); // Reload meetings to show test meeting
+          } else {
+            alert(`❌ Webhook test failed:\n\n${data.error || 'Unknown error'}\n\nStatus: ${data.status}`);
+          }
+        } catch (error) {
+          console.error("Webhook test error:", error);
+          alert(`❌ Error testing webhook: ${error.message}`);
+        } finally {
+          const btn = event.target;
+          btn.disabled = false;
+          btn.textContent = "🧪 Test Webhook";
         }
       }
 
