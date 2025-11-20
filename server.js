@@ -968,35 +968,30 @@ app.get("/api/fathom/webhook-status", async (req, res) => {
       });
     }
 
-    // Fetch webhook details from Fathom API
-    const accessToken = await getValidAccessToken(userId);
-    const response = await fetch(
-      `https://api.fathom.ai/external/v1/webhooks/${connection.webhook_id}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+    // Use ensureWebhookExists to verify and auto-recreate if needed
+    const webhookStatus = await ensureWebhookExists(userId);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return res.status(response.status).json({
+    if (!webhookStatus.exists) {
+      return res.json({
         connected: true,
-        webhook_exists: true,
+        webhook_exists: false,
         webhook_id: connection.webhook_id,
-        error: `Failed to fetch webhook from Fathom: ${response.status} - ${errorText}`,
+        error:
+          webhookStatus.error ||
+          "Webhook not found in Fathom",
+        message:
+          "Webhook was deleted or doesn't exist. It will be recreated automatically on next check.",
         user_id: userId,
       });
     }
 
-    const webhook = await response.json();
-
+    // Webhook exists and is verified (may have been recreated)
+    const webhook = webhookStatus.webhook;
     return res.json({
       connected: true,
       webhook_exists: true,
-      webhook_id: connection.webhook_id,
+      webhook_id: webhook.id,
+      webhook_recreated: webhookStatus.recreated || false,
       webhook_details: {
         id: webhook.id,
         url: webhook.url,
