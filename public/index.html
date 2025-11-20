@@ -454,11 +454,17 @@
           const userId = getUserIdFromUrl();
           const res = await fetch(`/api/fathom/webhook-status?user_id=${encodeURIComponent(userId)}`);
           
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          // Parse response even if status is not ok (backend may return 200 with error details)
+          let data;
+          try {
+            data = await res.json();
+          } catch (parseError) {
+            // If JSON parsing fails, throw the original error
+            if (!res.ok) {
+              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+            throw parseError;
           }
-          
-          const data = await res.json();
 
           const webhookStatusEl = document.getElementById("webhookStatus");
           const webhookDetailsEl = document.getElementById("webhookDetails");
@@ -468,10 +474,15 @@
             return;
           }
 
+          webhookStatusEl.style.display = "block";
+
           if (data.webhook_exists && data.webhook_details) {
-            webhookStatusEl.style.display = "block";
             const details = data.webhook_details;
-            webhookDetailsEl.innerHTML = `
+            let statusMessage = '';
+            if (data.webhook_recreated) {
+              statusMessage = '<div style="color: #10b981; margin-bottom: 8px; padding: 8px; background: #d1fae5; border-radius: 6px;">✅ Webhook was automatically recreated!</div>';
+            }
+            webhookDetailsEl.innerHTML = statusMessage + `
               <div style="margin: 4px 0;"><strong>ID:</strong> ${details.id}</div>
               <div style="margin: 4px 0;"><strong>URL:</strong> <code style="font-size: 12px;">${details.url}</code></div>
               <div style="margin: 4px 0;"><strong>Created:</strong> ${new Date(details.created_at).toLocaleString()}</div>
@@ -479,16 +490,28 @@
               <div style="margin: 4px 0;"><strong>Triggers:</strong> ${(details.triggered_for || []).join(', ')}</div>
             `;
           } else if (data.webhook_exists) {
-            webhookStatusEl.style.display = "block";
             webhookDetailsEl.innerHTML = `
               <div style="color: #ef4444;">⚠️ Webhook exists but details unavailable</div>
               <div style="margin-top: 4px;"><strong>Webhook ID:</strong> ${data.webhook_id}</div>
               ${data.error ? `<div style="color: #ef4444; margin-top: 4px;">Error: ${data.error}</div>` : ''}
             `;
-          } else {
-            webhookStatusEl.style.display = "block";
+          } else if (data.connected) {
+            // Webhook was in DB but doesn't exist in Fathom
             webhookDetailsEl.innerHTML = `
-              <div style="color: #ef4444;">❌ No webhook found. Please connect Fathom.</div>
+              <div style="color: #f59e0b; padding: 8px; background: #fef3c7; border-radius: 6px; margin-bottom: 8px;">
+                ⚠️ Webhook not found in Fathom
+              </div>
+              <div style="margin: 4px 0;"><strong>Stored Webhook ID:</strong> ${data.webhook_id || 'N/A'}</div>
+              ${data.error ? `<div style="color: #ef4444; margin-top: 4px;">Error: ${data.error}</div>` : ''}
+              ${data.message ? `<div style="color: #6b7280; margin-top: 4px; font-size: 13px;">${data.message}</div>` : ''}
+              <div style="margin-top: 8px; padding: 8px; background: #eff6ff; border-radius: 6px;">
+                <strong>💡 Tip:</strong> Click "Check Webhook" again to automatically recreate it.
+              </div>
+            `;
+          } else {
+            webhookDetailsEl.innerHTML = `
+              <div style="color: #ef4444;">❌ No webhook found. Please connect Fathom first.</div>
+              ${data.message ? `<div style="color: #6b7280; margin-top: 4px;">${data.message}</div>` : ''}
             `;
           }
         } catch (error) {
