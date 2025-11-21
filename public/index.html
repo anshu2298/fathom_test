@@ -229,18 +229,45 @@
     <!-- User ID Management -->
     <div class="card">
       <h3>👤 User ID (for Testing)</h3>
-      <div style="margin: 16px 0;">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-          <strong style="color: #374151;">Your User ID:</strong>
-          <code id="userIdDisplay" style="background: #f3f4f6; padding: 8px 12px; border-radius: 6px; font-size: 14px; color: #111827; font-weight: 600;">Loading...</code>
+      <div style="margin: 16px 0">
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+          "
+        >
+          <strong style="color: #374151"
+            >Your User ID:</strong
+          >
+          <code
+            id="userIdDisplay"
+            style="
+              background: #f3f4f6;
+              padding: 8px 12px;
+              border-radius: 6px;
+              font-size: 14px;
+              color: #111827;
+              font-weight: 600;
+            "
+            >Loading...</code
+          >
         </div>
-        <p style="color: #6b7280; font-size: 14px; margin: 8px 0;">
-          Each user gets a unique ID for data isolation. In production, this will come from your auth system.
+        <p
+          style="
+            color: #6b7280;
+            font-size: 14px;
+            margin: 8px 0;
+          "
+        >
+          Each user gets a unique ID for data isolation. In
+          production, this will come from your auth system.
         </p>
         <button
           class="btn-secondary"
           onclick="generateNewUserId()"
-          style="font-size: 14px; padding: 8px 16px;"
+          style="font-size: 14px; padding: 8px 16px"
         >
           🔄 Generate New User ID
         </button>
@@ -256,32 +283,19 @@
       >
         Checking connection...
       </div>
-      <div id="webhookStatus" style="margin-top: 16px; display: none;">
-        <div style="padding: 12px; background: #f9fafb; border-radius: 8px; margin: 8px 0;">
-          <strong>Webhook Status:</strong>
-          <div id="webhookDetails" style="margin-top: 8px; font-size: 14px; color: #6b7280;"></div>
-        </div>
-      </div>
-      <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+      <div
+        style="
+          margin-top: 12px;
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        "
+      >
         <button
           class="btn-secondary"
           onclick="checkStatus()"
         >
           🔄 Refresh Status
-        </button>
-        <button
-          class="btn-secondary"
-          onclick="checkWebhookStatus()"
-          style="font-size: 14px; padding: 8px 16px;"
-        >
-          🔍 Check Webhook
-        </button>
-        <button
-          class="btn-secondary"
-          onclick="testWebhook()"
-          style="font-size: 14px; padding: 8px 16px;"
-        >
-          🧪 Test Webhook
         </button>
       </div>
     </div>
@@ -305,11 +319,18 @@
 
     <!-- Import Historical Meetings -->
     <div class="card">
-      <h3>📦 Import Historical Meetings</h3>
+      <h3>📦 Sync Meetings</h3>
       <p style="color: #6b7280; margin-bottom: 16px">
-        Pull ALL previously recorded meetings from Fathom
-        into your database. Transcripts will be delivered
-        via webhook shortly after requesting.
+        Sync meetings from Fathom into your database. Uses
+        incremental sync to only fetch new meetings since
+        last sync.
+        <br /><br />
+        <strong>Automatic Sync:</strong> Meetings are
+        automatically synced every 30 minutes for all
+        connected users.
+        <br />
+        <strong>Manual Sync:</strong> Click the button below
+        to manually trigger a sync now.
       </p>
 
       <button
@@ -317,7 +338,7 @@
         id="importBtn"
         onclick="importHistoricalMeetings()"
       >
-        📤 Import All Meetings
+        🔄 Sync Meetings Now
       </button>
 
       <div id="importResult"></div>
@@ -343,11 +364,16 @@
 
     <script>
       // User ID Management
-      const USER_ID_KEY = 'fathom_test_user_id';
+      const USER_ID_KEY = "fathom_test_user_id";
 
       // Generate a unique user ID
       function generateUserId() {
-        return 'user_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
+        return (
+          "user_" +
+          Date.now() +
+          "_" +
+          Math.random().toString(36).substring(2, 11)
+        );
       }
 
       // Get or create user ID
@@ -372,18 +398,24 @@
       // Update user ID display
       function updateUserIdDisplay() {
         const userId = getUserId();
-        document.getElementById('userIdDisplay').textContent = userId;
+        document.getElementById(
+          "userIdDisplay"
+        ).textContent = userId;
       }
 
       // Get user ID from URL or localStorage
       function getUserIdFromUrl() {
-        const params = new URLSearchParams(window.location.search);
-        return params.get('user_id') || getUserId();
+        const params = new URLSearchParams(
+          window.location.search
+        );
+        return params.get("user_id") || getUserId();
       }
 
       // Initialize user ID on page load
       (function initUserId() {
-        const urlUserId = new URLSearchParams(window.location.search).get('user_id');
+        const urlUserId = new URLSearchParams(
+          window.location.search
+        ).get("user_id");
         if (urlUserId) {
           localStorage.setItem(USER_ID_KEY, urlUserId);
         }
@@ -394,16 +426,23 @@
       async function checkStatus() {
         try {
           const userId = getUserIdFromUrl();
-          const res = await fetch(`/api/fathom/status?user_id=${encodeURIComponent(userId)}`);
-          
+          const res = await fetch(
+            `/api/fathom/status?user_id=${encodeURIComponent(
+              userId
+            )}`
+          );
+
           if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            throw new Error(
+              `HTTP ${res.status}: ${res.statusText}`
+            );
           }
-          
+
           const data = await res.json();
 
-          const statusEl = document.getElementById("status");
-          
+          const statusEl =
+            document.getElementById("status");
+
           if (!statusEl) {
             console.warn("Status element not found in DOM");
             return;
@@ -413,10 +452,10 @@
             statusEl.className = "status connected";
             statusEl.innerHTML = `
               ✅ <strong>Connected</strong><br>
-              <small>Webhook ID: ${
-                data.webhook_id || "N/A"
-              }</small><br>
-              <small>User ID: ${data.user_id || userId}</small>
+              <small>Meetings will sync automatically every 30 minutes</small><br>
+              <small>User ID: ${
+                data.user_id || userId
+              }</small>
             `;
           } else {
             statusEl.className = "status disconnected";
@@ -426,151 +465,23 @@
               <small>User ID: ${userId}</small>
             `;
           }
-          
-          // Also check webhook status if connected (with error handling)
-          if (data.connected && data.webhook_id) {
-            // Call checkWebhookStatus but don't let it break the page if it fails
-            checkWebhookStatus().catch(err => {
-              console.warn("Webhook status check failed (non-critical):", err);
-              // Don't show error to user, just hide the webhook status section
-              document.getElementById("webhookStatus").style.display = "none";
-            });
-          } else {
-            document.getElementById("webhookStatus").style.display = "none";
-          }
         } catch (error) {
           console.error("Status check error:", error);
           const userId = getUserIdFromUrl();
-          const statusEl = document.getElementById("status");
+          const statusEl =
+            document.getElementById("status");
           if (statusEl) {
             statusEl.innerHTML = `⚠️ Error checking status (User ID: ${userId})`;
           }
         }
       }
 
-      // Check webhook status
-      async function checkWebhookStatus() {
-        try {
-          const userId = getUserIdFromUrl();
-          const res = await fetch(`/api/fathom/webhook-status?user_id=${encodeURIComponent(userId)}`);
-          
-          // Parse response even if status is not ok (backend may return 200 with error details)
-          let data;
-          try {
-            data = await res.json();
-          } catch (parseError) {
-            // If JSON parsing fails, throw the original error
-            if (!res.ok) {
-              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
-            throw parseError;
-          }
-
-          const webhookStatusEl = document.getElementById("webhookStatus");
-          const webhookDetailsEl = document.getElementById("webhookDetails");
-          
-          if (!webhookStatusEl || !webhookDetailsEl) {
-            console.warn("Webhook status elements not found in DOM");
-            return;
-          }
-
-          webhookStatusEl.style.display = "block";
-
-          if (data.webhook_exists && data.webhook_details) {
-            const details = data.webhook_details;
-            let statusMessage = '';
-            if (data.webhook_recreated) {
-              statusMessage = '<div style="color: #10b981; margin-bottom: 8px; padding: 8px; background: #d1fae5; border-radius: 6px;">✅ Webhook was automatically recreated!</div>';
-            }
-            webhookDetailsEl.innerHTML = statusMessage + `
-              <div style="margin: 4px 0;"><strong>ID:</strong> ${details.id}</div>
-              <div style="margin: 4px 0;"><strong>URL:</strong> <code style="font-size: 12px;">${details.url}</code></div>
-              <div style="margin: 4px 0;"><strong>Created:</strong> ${new Date(details.created_at).toLocaleString()}</div>
-              <div style="margin: 4px 0;"><strong>Include Transcript:</strong> ${details.include_transcript ? '✅' : '❌'}</div>
-              <div style="margin: 4px 0;"><strong>Triggers:</strong> ${(details.triggered_for || []).join(', ')}</div>
-            `;
-          } else if (data.webhook_exists) {
-            webhookDetailsEl.innerHTML = `
-              <div style="color: #ef4444;">⚠️ Webhook exists but details unavailable</div>
-              <div style="margin-top: 4px;"><strong>Webhook ID:</strong> ${data.webhook_id}</div>
-              ${data.error ? `<div style="color: #ef4444; margin-top: 4px;">Error: ${data.error}</div>` : ''}
-            `;
-          } else if (data.connected) {
-            // Webhook was in DB but doesn't exist in Fathom
-            webhookDetailsEl.innerHTML = `
-              <div style="color: #f59e0b; padding: 8px; background: #fef3c7; border-radius: 6px; margin-bottom: 8px;">
-                ⚠️ Webhook not found in Fathom
-              </div>
-              <div style="margin: 4px 0;"><strong>Stored Webhook ID:</strong> ${data.webhook_id || 'N/A'}</div>
-              ${data.error ? `<div style="color: #ef4444; margin-top: 4px;">Error: ${data.error}</div>` : ''}
-              ${data.message ? `<div style="color: #6b7280; margin-top: 4px; font-size: 13px;">${data.message}</div>` : ''}
-              <div style="margin-top: 8px; padding: 8px; background: #eff6ff; border-radius: 6px;">
-                <strong>💡 Tip:</strong> Click "Check Webhook" again to automatically recreate it.
-              </div>
-            `;
-          } else {
-            webhookDetailsEl.innerHTML = `
-              <div style="color: #ef4444;">❌ No webhook found. Please connect Fathom first.</div>
-              ${data.message ? `<div style="color: #6b7280; margin-top: 4px;">${data.message}</div>` : ''}
-            `;
-          }
-        } catch (error) {
-          console.error("Webhook status check error:", error);
-          const webhookStatusEl = document.getElementById("webhookStatus");
-          const webhookDetailsEl = document.getElementById("webhookDetails");
-          
-          // Only update if elements exist
-          if (webhookStatusEl && webhookDetailsEl) {
-            webhookStatusEl.style.display = "block";
-            webhookDetailsEl.innerHTML = `
-              <div style="color: #ef4444;">⚠️ Error checking webhook status: ${error.message}</div>
-            `;
-          }
-          
-          // Re-throw so caller can handle it
-          throw error;
-        }
-      }
-
-      // Test webhook
-      async function testWebhook() {
-        try {
-          const userId = getUserIdFromUrl();
-          const btn = event.target;
-          const originalText = btn.textContent;
-          btn.disabled = true;
-          btn.textContent = "⏳ Testing...";
-
-          const res = await fetch(`/api/fathom/test-webhook?user_id=${encodeURIComponent(userId)}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ user_id: userId }),
-          });
-
-          const data = await res.json();
-
-          if (data.success) {
-            alert(`✅ Webhook test successful!\n\nStatus: ${data.status}\nTranscript items: ${data.webhook_response?.transcript_items || 0}\n\nCheck the meetings list to see the test meeting.`);
-            loadMeetings(); // Reload meetings to show test meeting
-          } else {
-            alert(`❌ Webhook test failed:\n\n${data.error || 'Unknown error'}\n\nStatus: ${data.status}`);
-          }
-        } catch (error) {
-          console.error("Webhook test error:", error);
-          alert(`❌ Error testing webhook: ${error.message}`);
-        } finally {
-          const btn = event.target;
-          btn.disabled = false;
-          btn.textContent = "🧪 Test Webhook";
-        }
-      }
-
       // Connect to Fathom
       function connect() {
         const userId = getUserIdFromUrl();
-        window.location.href = `/api/fathom/connect?user_id=${encodeURIComponent(userId)}`;
+        window.location.href = `/api/fathom/connect?user_id=${encodeURIComponent(
+          userId
+        )}`;
       }
 
       // Load meetings from database
@@ -585,7 +496,11 @@
 
         try {
           const userId = getUserIdFromUrl();
-          const res = await fetch(`/api/fathom/meetings?user_id=${encodeURIComponent(userId)}`);
+          const res = await fetch(
+            `/api/fathom/meetings?user_id=${encodeURIComponent(
+              userId
+            )}`
+          );
           const data = await res.json();
 
           if (data.error) {
@@ -618,21 +533,31 @@
                 if (Array.isArray(m.transcript)) {
                   // Already an array
                   transcript = m.transcript;
-                } else if (typeof m.transcript === 'string') {
+                } else if (
+                  typeof m.transcript === "string"
+                ) {
                   // JSON string, try to parse
                   try {
                     const parsed = JSON.parse(m.transcript);
-                    transcript = Array.isArray(parsed) ? parsed : (parsed.transcript || []);
+                    transcript = Array.isArray(parsed)
+                      ? parsed
+                      : parsed.transcript || [];
                   } catch (e) {
-                    console.warn('Failed to parse transcript:', e);
+                    console.warn(
+                      "Failed to parse transcript:",
+                      e
+                    );
                     transcript = [];
                   }
-                } else if (m.transcript.transcript && Array.isArray(m.transcript.transcript)) {
+                } else if (
+                  m.transcript.transcript &&
+                  Array.isArray(m.transcript.transcript)
+                ) {
                   // Object with transcript property (e.g., {"transcript": [...]})
                   transcript = m.transcript.transcript;
                 }
               }
-              
+
               const transcriptPreview = transcript.slice(
                 0,
                 5
@@ -722,19 +647,24 @@
 
         // Disable button and show loading
         btn.disabled = true;
-        btn.textContent = "⏳ Importing...";
+        btn.textContent = "⏳ Syncing...";
         resultDiv.innerHTML =
-          '<div class="loading">Requesting all transcripts from Fathom...</div>';
+          '<div class="loading">Syncing meetings from Fathom...</div>';
 
         try {
           const userId = getUserIdFromUrl();
-          const res = await fetch(`/api/fathom/import?user_id=${encodeURIComponent(userId)}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ user_id: userId }),
-          });
+          const res = await fetch(
+            `/api/fathom/import?user_id=${encodeURIComponent(
+              userId
+            )}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ user_id: userId }),
+            }
+          );
 
           const data = await res.json();
 
@@ -747,12 +677,32 @@
           const skippedCount = data.skipped || 0;
           const hasImported = importedCount > 0;
           const hasSkipped = skippedCount > 0;
+          const isIncremental =
+            data.is_incremental === true;
 
           resultDiv.innerHTML = `
-            <div class="result-message ${hasImported ? 'success' : 'info'}" style="background: ${hasImported ? '#d1fae5' : '#dbeafe'}; color: ${hasImported ? '#065f46' : '#1e40af'}; border: 1px solid ${hasImported ? '#10b981' : '#3b82f6'};">
-              ${hasImported ? '✅' : 'ℹ️'} <strong>Import completed!</strong><br>
+            <div class="result-message ${
+              hasImported ? "success" : "info"
+            }" style="background: ${
+            hasImported ? "#d1fae5" : "#dbeafe"
+          }; color: ${
+            hasImported ? "#065f46" : "#1e40af"
+          }; border: 1px solid ${
+            hasImported ? "#10b981" : "#3b82f6"
+          };">
+              ${
+                hasImported ? "✅" : "ℹ️"
+              } <strong>Sync completed!</strong><br>
               <small>
-                ${data.message || `Imported ${importedCount} new meeting(s). ${skippedCount} meeting(s) were skipped.`}
+                ${
+                  data.message ||
+                  `Synced ${importedCount} new meeting(s). ${skippedCount} meeting(s) were skipped.`
+                }
+                ${
+                  isIncremental
+                    ? '<br><span style="font-size: 12px; color: #6b7280;">🔄 Incremental sync: Only new meetings since last sync were processed.</span>'
+                    : ""
+                }
               </small>
             </div>
             ${
@@ -768,7 +718,9 @@
                       m.title || "Untitled"
                     } - ${new Date(
                         m.createdAt
-                      ).toLocaleDateString()} (${m.transcriptItems || 0} transcript items)</li>
+                      ).toLocaleDateString()} (${
+                        m.transcriptItems || 0
+                      } transcript items)</li>
                   `
                     )
                     .join("")}
@@ -778,7 +730,8 @@
                 : ""
             }
             ${
-              data.skipped_meetings && data.skipped_meetings.length > 0
+              data.skipped_meetings &&
+              data.skipped_meetings.length > 0
                 ? `
               <div style="margin-top: 12px;">
                 <strong>⏭️ Skipped meetings (${skippedCount}):</strong>
@@ -787,13 +740,21 @@
                     .slice(0, 10)
                     .map(
                       (m) => `
-                    <li>${
-                      m.title || "Untitled"
-                    } - ${m.reason === 'already_exists' ? 'Already in database' : `Error: ${m.error || 'Unknown'}`}</li>
+                    <li>${m.title || "Untitled"} - ${
+                        m.reason === "already_exists"
+                          ? "Already in database"
+                          : `Error: ${m.error || "Unknown"}`
+                      }</li>
                   `
                     )
                     .join("")}
-                  ${data.skipped_meetings.length > 10 ? `<li style="font-style: italic;">... and ${data.skipped_meetings.length - 10} more</li>` : ''}
+                  ${
+                    data.skipped_meetings.length > 10
+                      ? `<li style="font-style: italic;">... and ${
+                          data.skipped_meetings.length - 10
+                        } more</li>`
+                      : ""
+                  }
                 </ul>
               </div>
             `
@@ -816,25 +777,32 @@
           `;
         } finally {
           btn.disabled = false;
-          btn.textContent = "📤 Import All Meetings";
+          btn.textContent = "🔄 Sync Meetings Now";
         }
       }
 
       // Show success message if returning from OAuth
       (function showSuccessMessage() {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('connected') === 'true') {
-          const webhookId = params.get('webhook_id');
+        const params = new URLSearchParams(
+          window.location.search
+        );
+        if (params.get("connected") === "true") {
           const userId = getUserIdFromUrl();
-          
+
           // Show success alert
           setTimeout(() => {
-            alert(`✅ Fathom Connected Successfully!\n\nUser ID: ${userId}\nWebhook ID: ${webhookId || 'N/A'}\n\nYour meetings will now be automatically synced.`);
+            alert(
+              `✅ Fathom Connected Successfully!\n\nUser ID: ${userId}\n\nYour meetings will now be automatically synced every 30 minutes.`
+            );
           }, 500);
-          
+
           // Clean up URL parameters
-          const cleanUrl = window.location.pathname + (userId ? `?user_id=${encodeURIComponent(userId)}` : '');
-          window.history.replaceState({}, '', cleanUrl);
+          const cleanUrl =
+            window.location.pathname +
+            (userId
+              ? `?user_id=${encodeURIComponent(userId)}`
+              : "");
+          window.history.replaceState({}, "", cleanUrl);
         }
       })();
 
@@ -842,23 +810,30 @@
       (async function initializePage() {
         try {
           await Promise.all([
-            checkStatus().catch(err => {
+            checkStatus().catch((err) => {
               console.error("Failed to check status:", err);
-              document.getElementById("status").innerHTML = 
-                `⚠️ Error checking connection status`;
+              document.getElementById(
+                "status"
+              ).innerHTML = `⚠️ Error checking connection status`;
             }),
-            loadMeetings().catch(err => {
-              console.error("Failed to load meetings:", err);
-            })
+            loadMeetings().catch((err) => {
+              console.error(
+                "Failed to load meetings:",
+                err
+              );
+            }),
           ]);
         } catch (error) {
-          console.error("Page initialization error:", error);
+          console.error(
+            "Page initialization error:",
+            error
+          );
         }
       })();
 
       // Auto-refresh meetings every 30 seconds
       setInterval(() => {
-        loadMeetings().catch(err => {
+        loadMeetings().catch((err) => {
           console.error("Failed to refresh meetings:", err);
         });
       }, 30000);
