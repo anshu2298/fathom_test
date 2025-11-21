@@ -24,7 +24,7 @@ const supabase = createClient(
 /**
  * Sync meetings from Fathom API to database for a specific user
  * Supports incremental sync by tracking last_sync_at timestamp
- * 
+ *
  * @param {string} userId - User ID to sync meetings for
  * @returns {Promise<object>} Sync results with imported, skipped, meetings, skipped_meetings, error, is_incremental
  */
@@ -70,7 +70,9 @@ async function syncUserMeetings(userId) {
         skipped: 0,
         meetings: [],
         skipped_meetings: [],
-        error: error.message || "Failed to get Fathom access token",
+        error:
+          error.message ||
+          "Failed to get Fathom access token",
         is_incremental: false,
       };
     }
@@ -89,7 +91,9 @@ async function syncUserMeetings(userId) {
     const skipped = [];
 
     console.log(
-      `🗂️ Starting ${isIncremental ? "incremental" : "full"} sync for user: ${userId}...`
+      `🗂️ Starting ${
+        isIncremental ? "incremental" : "full"
+      } sync for user: ${userId}...`
     );
 
     // Iterate through paginated results
@@ -107,7 +111,7 @@ async function syncUserMeetings(userId) {
             meeting.title
           );
           skipped.push({
-            recordingId: null,
+            transcript_id: null,
             title: meeting.title,
             createdAt: meeting.createdAt,
             reason: "no_recording_id",
@@ -120,8 +124,11 @@ async function syncUserMeetings(userId) {
           const meetingCreatedAt = meeting.createdAt
             ? new Date(meeting.createdAt)
             : null;
-          
-          if (meetingCreatedAt && meetingCreatedAt <= lastSyncAt) {
+
+          if (
+            meetingCreatedAt &&
+            meetingCreatedAt <= lastSyncAt
+          ) {
             // Meeting is older than last sync, skip it
             continue;
           }
@@ -130,9 +137,9 @@ async function syncUserMeetings(userId) {
         // Check if meeting already exists in database (safety check)
         const { data: existingMeeting } = await supabase
           .from("meeting_transcripts")
-          .select("recording_id")
+          .select("transcript_id")
           .eq("user_id", userId)
-          .eq("recording_id", meeting.recordingId)
+          .eq("transcript_id", meeting.recordingId)
           .maybeSingle();
 
         if (existingMeeting) {
@@ -141,7 +148,7 @@ async function syncUserMeetings(userId) {
             meeting.title
           );
           skipped.push({
-            recordingId: meeting.recordingId,
+            transcript_id: meeting.recordingId,
             title: meeting.title,
             createdAt: meeting.createdAt,
             reason: "already_exists",
@@ -185,18 +192,55 @@ async function syncUserMeetings(userId) {
             `✅ Got transcript with ${transcript.length} items`
           );
 
-          // Insert directly into database with full meeting details (scoped to user_id)
+          // Calculate call duration from recording_start_time and recording_end_time
+          let callDuration = null;
+          if (
+            meeting.recording_start_time &&
+            meeting.recording_end_time
+          ) {
+            try {
+              const startTime = new Date(
+                meeting.recording_start_time
+              );
+              const endTime = new Date(
+                meeting.recording_end_time
+              );
+              const durationMs = endTime - startTime;
+              callDuration = Math.round(
+                durationMs / (1000 * 60)
+              ); // Convert to minutes
+            } catch (error) {
+              console.warn(
+                `⚠️ Could not calculate duration for ${meeting.recordingId}:`,
+                error.message
+              );
+            }
+          }
+
+          // Prepare metadata object
+          const metadata = {
+            meeting_id: meeting.recordingId || null,
+            call_duration: callDuration,
+            call_date:
+              meeting.recording_start_time ||
+              meeting.createdAt ||
+              new Date().toISOString(),
+          };
+
+          // Insert directly into database with structure matching the image format
+          // Keep transcript as JSONB array (not string)
           const { error: insertError } = await supabase
             .from("meeting_transcripts")
             .insert({
+              transcript_id: meeting.recordingId, // Use recording_id as transcript_id
+              transcript: transcript, // Keep as JSONB array
+              meeting_title:
+                meeting.meetingTitle || meeting.title,
               user_id: userId,
-              recording_id: meeting.recordingId,
-              title: meeting.title,
-              meeting_title: meeting.meetingTitle || meeting.title,
-              url: meeting.url,
-              transcript: transcript,
-              raw_payload: { meeting, transcript },
-              created_at: meeting.createdAt || new Date().toISOString(),
+              metadata: metadata,
+              created_at:
+                meeting.createdAt ||
+                new Date().toISOString(),
             });
 
           if (insertError) {
@@ -208,7 +252,7 @@ async function syncUserMeetings(userId) {
           }
 
           processed.push({
-            recordingId: meeting.recordingId,
+            transcript_id: meeting.recordingId,
             title: meeting.title,
             createdAt: meeting.createdAt,
             transcriptItems: transcript.length,
@@ -223,7 +267,7 @@ async function syncUserMeetings(userId) {
             err.message
           );
           skipped.push({
-            recordingId: meeting.recordingId,
+            transcript_id: meeting.recordingId,
             title: meeting.title,
             createdAt: meeting.createdAt,
             reason: "error",
@@ -266,7 +310,9 @@ async function syncUserMeetings(userId) {
     }
 
     console.log(
-      `🎉 Finished ${isIncremental ? "incremental" : "full"} sync for user: ${userId} - ${totalProcessed} new meetings imported, ${totalSkipped} skipped`
+      `🎉 Finished ${
+        isIncremental ? "incremental" : "full"
+      } sync for user: ${userId} - ${totalProcessed} new meetings imported, ${totalSkipped} skipped`
     );
 
     return {
@@ -364,7 +410,10 @@ export const setupMeetingRoutes = (app) => {
         });
       }
 
-      if (syncResult.imported === 0 && syncResult.skipped === 0) {
+      if (
+        syncResult.imported === 0 &&
+        syncResult.skipped === 0
+      ) {
         return res.json({
           imported: 0,
           skipped: 0,
@@ -401,7 +450,9 @@ if (process.env.ENABLE_AUTO_SYNC !== "false") {
   // Run sync immediately on startup (optional)
   const runInitialSync = async () => {
     try {
-      console.log("🔄 Running initial automatic sync on startup...");
+      console.log(
+        "🔄 Running initial automatic sync on startup..."
+      );
       await runAutomaticSync();
     } catch (error) {
       console.error("❌ Initial sync error:", error);
@@ -411,13 +462,16 @@ if (process.env.ENABLE_AUTO_SYNC !== "false") {
   // Run sync for all users with Fathom connections
   const runAutomaticSync = async () => {
     try {
-      console.log("🔄 Starting automatic sync for all users...");
+      console.log(
+        "🔄 Starting automatic sync for all users..."
+      );
 
       // Get all users with Fathom connections
-      const { data: connections, error: connectionsError } = await supabase
-        .from("fathom_connections")
-        .select("user_id")
-        .not("access_token", "is", null);
+      const { data: connections, error: connectionsError } =
+        await supabase
+          .from("fathom_connections")
+          .select("user_id")
+          .not("access_token", "is", null);
 
       if (connectionsError) {
         console.error(
@@ -428,11 +482,15 @@ if (process.env.ENABLE_AUTO_SYNC !== "false") {
       }
 
       if (!connections || connections.length === 0) {
-        console.log("ℹ️ No users with Fathom connections found");
+        console.log(
+          "ℹ️ No users with Fathom connections found"
+        );
         return;
       }
 
-      const userIds = connections.map((conn) => conn.user_id);
+      const userIds = connections.map(
+        (conn) => conn.user_id
+      );
       console.log(
         `🔄 Syncing meetings for ${userIds.length} user(s)...`
       );
@@ -444,7 +502,9 @@ if (process.env.ENABLE_AUTO_SYNC !== "false") {
       // Process each user
       for (const userId of userIds) {
         try {
-          console.log(`🔄 Syncing meetings for user: ${userId}`);
+          console.log(
+            `🔄 Syncing meetings for user: ${userId}`
+          );
           const syncResult = await syncUserMeetings(userId);
 
           if (syncResult.error) {
