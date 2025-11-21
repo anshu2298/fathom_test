@@ -336,6 +336,16 @@ app.get("/api/fathom/callback", async (req, res) => {
       );
     }
 
+    // Get the access token from tokenStore (it should be stored by now)
+    // This ensures we have a valid token even if SDK fails
+    const storedTokens = await tokenStore.get();
+    if (!storedTokens || !storedTokens.token) {
+      throw new Error(
+        "Failed to retrieve access token after OAuth. Please try connecting again."
+      );
+    }
+    const accessToken = storedTokens.token;
+
     // Create webhook with user-specific URL
     const webhookUrl = `${process.env.APP_URL}/api/fathom/webhook/${userId}`;
 
@@ -353,8 +363,12 @@ app.get("/api/fathom/callback", async (req, res) => {
         triggeredFor: ["my_recordings"], // Required: array of recording types to trigger on
       });
     } catch (sdkError) {
+      console.log(
+        "⚠️ SDK webhook creation failed, using raw API:",
+        sdkError.message
+      );
       // If SDK fails, use raw API call with snake_case (official API format)
-      const accessToken = await getValidAccessToken(userId);
+      // Use the token we just got from tokenStore
       const response = await fetch(
         "https://api.fathom.ai/external/v1/webhooks",
         {
