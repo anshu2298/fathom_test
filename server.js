@@ -251,7 +251,6 @@ app.get("/api/fathom/callback", async (req, res) => {
     return res.status(400).send("No authorization code");
   }
 
-  // Extract user_id from state
   let userId;
   try {
     if (state) {
@@ -267,31 +266,20 @@ app.get("/api/fathom/callback", async (req, res) => {
   if (!userId) {
     return res.status(400).send(`
       <h1>❌ Missing User ID</h1>
-      <p>User ID is required for OAuth callback. Please initiate the connection from the main page.</p>
+      <p>User ID is required for OAuth callback.</p>
       <a href="/">Back to test page</a>
     `);
   }
 
   try {
     validateUserId(userId);
-
-    // Verify environment variables
-    if (
-      !process.env.FATHOM_CLIENT_ID ||
-      !process.env.FATHOM_CLIENT_SECRET
-    ) {
-      throw new Error(
-        "Missing FATHOM_CLIENT_ID or FATHOM_CLIENT_SECRET"
-      );
-    }
+    ensureFathomEnv();
 
     const redirectUri = `${process.env.APP_URL}/api/fathom/callback`;
 
-    // Token store for Supabase (scoped to user_id)
     const tokenStore = {
       get: async () => {
         const data = await fetchConnectionRow(userId);
-
         if (!data || !data.access_token) {
           return {
             token: "",
@@ -299,14 +287,12 @@ app.get("/api/fathom/callback", async (req, res) => {
             expires: 0,
           };
         }
-
         return {
           token: data.access_token || "",
           refresh_token: data.refresh_token || "",
           expires: data.token_expires_at || 0,
         };
       },
-
       set: async (token, refresh_token, expires) => {
         await persistConnectionTokens(
           userId,
@@ -317,7 +303,7 @@ app.get("/api/fathom/callback", async (req, res) => {
       },
     };
 
-    // Initialize Fathom with OAuth
+    // Initialize Fathom with OAuth - this will exchange code for tokens
     const getSecurity = Fathom.withAuthorization({
       clientId: process.env.FATHOM_CLIENT_ID,
       clientSecret: process.env.FATHOM_CLIENT_SECRET,
@@ -330,14 +316,12 @@ app.get("/api/fathom/callback", async (req, res) => {
       security: getSecurity,
     });
 
-    if (!fathom) {
-      throw new Error(
-        "Fathom instance not properly initialized"
-      );
-    }
+    // Wait a moment for tokens to be stored
+    await new Promise((resolve) =>
+      setTimeout(resolve, 1000)
+    );
 
-    // Get the access token from tokenStore (it should be stored by now)
-    // This ensures we have a valid token even if SDK fails
+    // NOW get the stored access token
     const storedTokens = await tokenStore.get();
     if (!storedTokens || !storedTokens.token) {
       throw new Error(
@@ -346,66 +330,44 @@ app.get("/api/fathom/callback", async (req, res) => {
     }
     const accessToken = storedTokens.token;
 
-    // Create webhook with user-specific URL
+    // Create webhook with CORRECT header
     const webhookUrl = `${process.env.APP_URL}/api/fathom/webhook/${userId}`;
 
-    // Create webhook according to official Fathom API
-    // Try SDK first (may use camelCase), fallback to raw API if needed
-    let webhook;
-    try {
-      // Try with camelCase (typical TypeScript SDK format)
-      webhook = await fathom.createWebhook({
-        destinationUrl: webhookUrl,
-        includeTranscript: true,
-        includeSummary: false, // We don't use summary
-        includeActionItems: false, // We don't use action items
-        includeCrmMatches: false, // We don't use CRM matches
-        triggeredFor: ["my_recordings"], // Required: array of recording types to trigger on
-      });
-    } catch (sdkError) {
-      console.log(
-        "⚠️ SDK webhook creation failed, using raw API:",
-        sdkError.message
-      );
-      // If SDK fails, use raw API call with snake_case (official API format)
-      // Use the token we just got from tokenStore
-      const response = await fetch(
-        "https://api.fathom.ai/external/v1/webhooks",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            destination_url: webhookUrl,
-            include_transcript: true,
-            include_summary: false,
-            include_action_items: false,
-            include_crm_matches: false,
-            triggered_for: ["my_recordings"],
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `Webhook creation failed: ${response.status} - ${errorText}`
-        );
+    const response = await fetch(
+      "https://api.fathom.ai/external/v1/webhooks",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Api-Key": accessToken, // ← CORRECTED: Use X-Api-Key, not Authorization
+        },
+        body: JSON.stringify({
+          destination_url: webhookUrl,
+          include_transcript: true,
+          include_summary: false,
+          include_action_items: false,
+          include_crm_matches: false,
+          triggered_for: ["my_recordings"],
+        }),
       }
+    );
 
-      webhook = await response.json();
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Webhook creation failed: ${response.status} - ${errorText}`
+      );
     }
 
-    // Verify webhook was created successfully
+    const webhook = await response.json();
+
     if (!webhook || !webhook.id) {
       throw new Error(
         "Webhook creation failed: No webhook ID returned"
       );
     }
 
-    // Store webhook ID and secret for signature verification
+    // Store webhook info
     const { error: updateError } = await supabase
       .from("fathom_connections")
       .update({
@@ -422,7 +384,6 @@ app.get("/api/fathom/callback", async (req, res) => {
       );
     }
 
-    // Redirect to home page with success message
     res.redirect(
       `/?user_id=${encodeURIComponent(
         userId
@@ -431,6 +392,7 @@ app.get("/api/fathom/callback", async (req, res) => {
       )}`
     );
   } catch (error) {
+    console.error("❌ OAuth callback error:", error);
     res.status(500).json({
       error: error.message,
       user_id: userId || null,
