@@ -275,71 +275,71 @@ app.get("/api/fathom/callback", async (req, res) => {
     validateUserId(userId);
     ensureFathomEnv();
 
-    const redirectUri = `${process.env.APP_URL}/api/fathom/callback`;
-
-    const tokenStore = {
-      get: async () => {
-        const data = await fetchConnectionRow(userId);
-        if (!data || !data.access_token) {
-          return {
-            token: "",
-            refresh_token: "",
-            expires: 0,
-          };
-        }
-        return {
-          token: data.access_token || "",
-          refresh_token: data.refresh_token || "",
-          expires: data.token_expires_at || 0,
-        };
-      },
-      set: async (token, refresh_token, expires) => {
-        await persistConnectionTokens(
-          userId,
-          token,
-          refresh_token,
-          expires
-        );
-      },
-    };
-
-    // Initialize Fathom with OAuth - this will exchange code for tokens
-    const getSecurity = Fathom.withAuthorization({
-      clientId: process.env.FATHOM_CLIENT_ID,
-      clientSecret: process.env.FATHOM_CLIENT_SECRET,
-      code: String(code),
-      redirectUri: redirectUri,
-      tokenStore,
-    });
-
-    const fathom = new Fathom({
-      security: getSecurity,
-    });
-
-    // Wait a moment for tokens to be stored
-    await new Promise((resolve) =>
-      setTimeout(resolve, 1000)
+    console.log(
+      `🔐 Starting OAuth token exchange for user: ${userId}`
     );
 
-    // NOW get the stored access token
-    const storedTokens = await tokenStore.get();
-    if (!storedTokens || !storedTokens.token) {
+    const redirectUri = `${process.env.APP_URL}/api/fathom/callback`;
+
+    // Step 1: Manually exchange authorization code for tokens
+    const tokenResponse = await fetch(FATHOM_TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: process.env.FATHOM_CLIENT_ID,
+        client_secret: process.env.FATHOM_CLIENT_SECRET,
+        code: String(code),
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error(
+        "❌ Token exchange failed:",
+        tokenResponse.status,
+        errorText
+      );
       throw new Error(
-        "Failed to retrieve access token after OAuth. Please try connecting again."
+        `Failed to exchange authorization code: ${tokenResponse.status} - ${errorText}`
       );
     }
-    const accessToken = storedTokens.token;
 
-    // Create webhook with CORRECT header
+    const tokenData = await tokenResponse.json();
+    console.log("✅ Token exchange successful");
+
+    // Step 2: Calculate token expiration time
+    const expiresAt =
+      Math.floor(Date.now() / 1000) +
+      (tokenData.expires_in ?? 0) -
+      TOKEN_REFRESH_BUFFER_SECONDS;
+
+    // Step 3: Store tokens in database
+    await persistConnectionTokens(
+      userId,
+      tokenData.access_token,
+      tokenData.refresh_token,
+      expiresAt
+    );
+
+    console.log("✅ Tokens stored in database");
+
+    // Step 4: Create webhook using the access token
     const webhookUrl = `${process.env.APP_URL}/api/fathom/webhook/${userId}`;
+    console.log(
+      `📡 Creating webhook with URL: ${webhookUrl}`
+    );
 
-    const response = await fetch(
+    const webhookResponse = await fetch(
       "https://api.fathom.ai/external/v1/webhooks",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Api-Key": accessToken, // ← CORRECTED: Use X-Api-Key, not Authorization
+          "X-Api-Key": tokenData.access_token, // Use X-Api-Key header
         },
         body: JSON.stringify({
           destination_url: webhookUrl,
@@ -352,14 +352,19 @@ app.get("/api/fathom/callback", async (req, res) => {
       }
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    if (!webhookResponse.ok) {
+      const errorText = await webhookResponse.text();
+      console.error(
+        "❌ Webhook creation failed:",
+        webhookResponse.status,
+        errorText
+      );
       throw new Error(
-        `Webhook creation failed: ${response.status} - ${errorText}`
+        `Webhook creation failed: ${webhookResponse.status} - ${errorText}`
       );
     }
 
-    const webhook = await response.json();
+    const webhook = await webhookResponse.json();
 
     if (!webhook || !webhook.id) {
       throw new Error(
@@ -367,7 +372,12 @@ app.get("/api/fathom/callback", async (req, res) => {
       );
     }
 
-    // Store webhook info
+    console.log("✅ Webhook created successfully:", {
+      id: webhook.id,
+      url: webhook.destination_url,
+    });
+
+    // Step 5: Store webhook info
     const { error: updateError } = await supabase
       .from("fathom_connections")
       .update({
@@ -384,6 +394,9 @@ app.get("/api/fathom/callback", async (req, res) => {
       );
     }
 
+    console.log("✅ Webhook info stored in database");
+
+    // Redirect to home page with success message
     res.redirect(
       `/?user_id=${encodeURIComponent(
         userId
