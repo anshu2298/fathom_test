@@ -104,6 +104,7 @@ async function syncUserMeetings(userId) {
       );
 
       for (const meeting of meetings) {
+        console.log(meeting);
         // Skip meetings without recordingId
         if (!meeting.recordingId) {
           console.log(
