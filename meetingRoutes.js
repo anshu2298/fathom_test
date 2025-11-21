@@ -104,7 +104,6 @@ async function syncUserMeetings(userId) {
       );
 
       for (const meeting of meetings) {
-        console.log(meeting);
         // Skip meetings without recordingId
         if (!meeting.recordingId) {
           console.log(
@@ -187,35 +186,68 @@ async function syncUserMeetings(userId) {
             );
           }
 
-          const transcript = await response.json();
+          const transcriptData = await response.json();
+
+          // Ensure transcript is an array
+          let transcript = [];
+          if (Array.isArray(transcriptData)) {
+            transcript = transcriptData;
+          } else if (
+            transcriptData &&
+            Array.isArray(transcriptData.transcript)
+          ) {
+            transcript = transcriptData.transcript;
+          } else if (
+            transcriptData &&
+            Array.isArray(transcriptData.items)
+          ) {
+            transcript = transcriptData.items;
+          }
 
           console.log(
             `✅ Got transcript with ${transcript.length} items`
           );
 
-          // Calculate call duration from recording_start_time and recording_end_time
+          // Calculate call duration from recordingStartTime and recordingEndTime
+          // Note: Fathom SDK uses camelCase (recordingStartTime, recordingEndTime)
           let callDuration = null;
           if (
-            meeting.recording_start_time &&
-            meeting.recording_end_time
+            meeting.recordingStartTime &&
+            meeting.recordingEndTime
           ) {
             try {
               const startTime = new Date(
-                meeting.recording_start_time
+                meeting.recordingStartTime
               );
               const endTime = new Date(
-                meeting.recording_end_time
+                meeting.recordingEndTime
               );
-              const durationMs = endTime - startTime;
-              callDuration = Math.round(
-                durationMs / (1000 * 60)
-              ); // Convert to minutes
+              const durationMs =
+                endTime.getTime() - startTime.getTime();
+              if (durationMs > 0) {
+                callDuration = Math.round(
+                  durationMs / (1000 * 60)
+                ); // Convert to minutes
+                console.log(
+                  `⏱️ Calculated duration: ${callDuration} min for ${meeting.recordingId}`
+                );
+              }
             } catch (error) {
               console.warn(
                 `⚠️ Could not calculate duration for ${meeting.recordingId}:`,
                 error.message
               );
             }
+          } else {
+            console.warn(
+              `⚠️ Missing recording times for ${meeting.recordingId}:`,
+              {
+                has_recordingStartTime:
+                  !!meeting.recordingStartTime,
+                has_recordingEndTime:
+                  !!meeting.recordingEndTime,
+              }
+            );
           }
 
           // Prepare metadata object
@@ -223,7 +255,7 @@ async function syncUserMeetings(userId) {
             meeting_id: meeting.recordingId || null,
             call_duration: callDuration,
             call_date:
-              meeting.recording_start_time ||
+              meeting.recordingStartTime ||
               meeting.createdAt ||
               new Date().toISOString(),
           };
