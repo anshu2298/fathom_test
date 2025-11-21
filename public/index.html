@@ -527,21 +527,21 @@
 
           container.innerHTML = data.meetings
             .map((m) => {
-              // Handle different transcript formats
+              // Handle transcript - it's a JSONB array
               let transcript = [];
               if (m.transcript) {
                 if (Array.isArray(m.transcript)) {
-                  // Already an array
+                  // Transcript is an array (JSONB format)
                   transcript = m.transcript;
                 } else if (
                   typeof m.transcript === "string"
                 ) {
-                  // JSON string, try to parse
+                  // Legacy format: try to parse JSON string
                   try {
                     const parsed = JSON.parse(m.transcript);
                     transcript = Array.isArray(parsed)
                       ? parsed
-                      : parsed.transcript || [];
+                      : [];
                   } catch (e) {
                     console.warn(
                       "Failed to parse transcript:",
@@ -549,14 +549,13 @@
                     );
                     transcript = [];
                   }
-                } else if (
-                  m.transcript.transcript &&
-                  Array.isArray(m.transcript.transcript)
-                ) {
-                  // Object with transcript property (e.g., {"transcript": [...]})
-                  transcript = m.transcript.transcript;
                 }
               }
+
+              // Get metadata if available
+              const metadata = m.metadata || {};
+              const callDuration = metadata.call_duration;
+              const callDate = metadata.call_date;
 
               const transcriptPreview = transcript.slice(
                 0,
@@ -567,15 +566,26 @@
               <div class="meeting">
                 <div class="meeting-title">
                   ${
-                    m.title ||
                     m.meeting_title ||
+                    m.title ||
                     "Untitled Meeting"
                   }
                 </div>
                 <div class="meeting-meta">
-                  📅 ${new Date(
-                    m.created_at
-                  ).toLocaleString()}
+                  📅 ${
+                    callDate
+                      ? new Date(callDate).toLocaleString()
+                      : m.created_at
+                      ? new Date(
+                          m.created_at
+                        ).toLocaleString()
+                      : "N/A"
+                  }
+                  ${
+                    callDuration
+                      ? ` • ⏱️ ${callDuration} min`
+                      : ""
+                  }
                 </div>
                 <div class="meeting-meta">
                   💬 Transcript items: ${transcript.length}
@@ -585,6 +595,11 @@
                       : ""
                   }
                 </div>
+                ${
+                  metadata.meeting_id
+                    ? `<div class="meeting-meta" style="font-size: 12px; color: #6b7280;">ID: ${metadata.meeting_id}</div>`
+                    : ""
+                }
                 
                 ${
                   transcriptPreview.length > 0
@@ -720,7 +735,11 @@
                         m.createdAt
                       ).toLocaleDateString()} (${
                         m.transcriptItems || 0
-                      } transcript items)</li>
+                      } transcript items)${
+                        m.transcript_id
+                          ? ` [ID: ${m.transcript_id}]`
+                          : ""
+                      }</li>
                   `
                     )
                     .join("")}
