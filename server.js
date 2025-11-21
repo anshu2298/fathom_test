@@ -276,12 +276,12 @@ app.get("/api/fathom/callback", async (req, res) => {
     ensureFathomEnv();
 
     console.log(
-      `🔐 Starting OAuth token exchange for user: ${userId}`
+      `🔐 Starting OAuth connection for user: ${userId}`
     );
 
     const redirectUri = `${process.env.APP_URL}/api/fathom/callback`;
 
-    // Step 1: Manually exchange authorization code for tokens
+    // Step 1: Exchange authorization code for tokens
     const tokenResponse = await fetch(FATHOM_TOKEN_URL, {
       method: "POST",
       headers: {
@@ -325,84 +325,15 @@ app.get("/api/fathom/callback", async (req, res) => {
       expiresAt
     );
 
-    console.log("✅ Tokens stored in database");
-
-    // Step 4: Create webhook using the access token
-    const webhookUrl = `${process.env.APP_URL}/api/fathom/webhook/${userId}`;
     console.log(
-      `📡 Creating webhook with URL: ${webhookUrl}`
+      "✅ Connection established - tokens stored in database"
     );
-
-    const webhookResponse = await fetch(
-      "https://api.fathom.ai/external/v1/webhooks",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Api-Key": tokenData.access_token, // Use X-Api-Key header
-        },
-        body: JSON.stringify({
-          destination_url: webhookUrl,
-          include_transcript: true,
-          include_summary: false,
-          include_action_items: false,
-          include_crm_matches: false,
-          triggered_for: ["my_recordings"],
-        }),
-      }
-    );
-
-    if (!webhookResponse.ok) {
-      const errorText = await webhookResponse.text();
-      console.error(
-        "❌ Webhook creation failed:",
-        webhookResponse.status,
-        errorText
-      );
-      throw new Error(
-        `Webhook creation failed: ${webhookResponse.status} - ${errorText}`
-      );
-    }
-
-    const webhook = await webhookResponse.json();
-
-    if (!webhook || !webhook.id) {
-      throw new Error(
-        "Webhook creation failed: No webhook ID returned"
-      );
-    }
-
-    console.log("✅ Webhook created successfully:", {
-      id: webhook.id,
-      url: webhook.destination_url,
-    });
-
-    // Step 5: Store webhook info
-    const { error: updateError } = await supabase
-      .from("fathom_connections")
-      .update({
-        webhook_id: webhook.id,
-        webhook_secret: webhook.secret || null,
-        webhook_created_at:
-          webhook.created_at || new Date().toISOString(),
-      })
-      .eq("user_id", userId);
-
-    if (updateError) {
-      throw new Error(
-        `Failed to store webhook: ${updateError.message}`
-      );
-    }
-
-    console.log("✅ Webhook info stored in database");
 
     // Redirect to home page with success message
     res.redirect(
       `/?user_id=${encodeURIComponent(
         userId
-      )}&connected=true&webhook_id=${encodeURIComponent(
-        webhook.id
-      )}`
+      )}&connected=true`
     );
   } catch (error) {
     console.error("❌ OAuth callback error:", error);
