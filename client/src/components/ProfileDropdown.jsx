@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { FiSettings, FiLogOut, FiChevronDown, FiChevronUp } from "react-icons/fi";
+import { FiSettings, FiLogOut } from "react-icons/fi";
 import "./ProfileDropdown.css";
 
 function ProfileDropdown({ user }) {
@@ -54,7 +54,6 @@ function ProfileDropdown({ user }) {
             {user.name?.charAt(0).toUpperCase() || "U"}
           </div>
         )}
-        {isOpen ? <FiChevronUp className="profile-arrow" /> : <FiChevronDown className="profile-arrow" />}
       </button>
 
       {isOpen && (

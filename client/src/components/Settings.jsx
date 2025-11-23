@@ -7,6 +7,7 @@ import {
   FiX,
   FiCalendar,
   FiCheckCircle,
+  FiActivity,
 } from "react-icons/fi";
 import "./Settings.css";
 
@@ -19,6 +20,10 @@ function Settings() {
     error: null,
   });
   const [calendarStatus, setCalendarStatus] = useState({
+    loading: true,
+    connected: false,
+  });
+  const [googleFitStatus, setGoogleFitStatus] = useState({
     loading: true,
     connected: false,
   });
@@ -109,13 +114,54 @@ function Settings() {
     }
   }, [user]);
 
+  const checkGoogleFitStatus = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      setGoogleFitStatus((prev) => ({
+        ...prev,
+        loading: true,
+      }));
+      const res = await fetch("/api/googlefit/status", {
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        throw new Error(
+          `HTTP ${res.status}: ${res.statusText}`
+        );
+      }
+
+      const data = await res.json();
+      setGoogleFitStatus({
+        loading: false,
+        connected: data.connected || false,
+      });
+    } catch (error) {
+      console.error(
+        "Google Fit status check error:",
+        error
+      );
+      setGoogleFitStatus({
+        loading: false,
+        connected: false,
+      });
+    }
+  }, [user]);
+
   useEffect(() => {
     if (user) {
       setName(user.name || "");
       checkConnectionStatus();
       checkCalendarStatus();
+      checkGoogleFitStatus();
     }
-  }, [user, checkConnectionStatus, checkCalendarStatus]);
+  }, [
+    user,
+    checkConnectionStatus,
+    checkCalendarStatus,
+    checkGoogleFitStatus,
+  ]);
 
   // Check for OAuth redirects
   useEffect(() => {
@@ -127,13 +173,22 @@ function Settings() {
       const cleanUrl = window.location.pathname;
       window.history.replaceState({}, "", cleanUrl);
     }
+    if (params.get("googlefit_connected") === "true") {
+      checkGoogleFitStatus();
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, "", cleanUrl);
+    }
     // Check for Fathom connection success
     if (params.get("connected") === "true") {
       checkConnectionStatus();
       const cleanUrl = window.location.pathname;
       window.history.replaceState({}, "", cleanUrl);
     }
-  }, [checkCalendarStatus, checkConnectionStatus]);
+  }, [
+    checkCalendarStatus,
+    checkGoogleFitStatus,
+    checkConnectionStatus,
+  ]);
 
   const handleConnectFathom = () => {
     if (!user) return;
@@ -165,6 +220,32 @@ function Settings() {
     } catch (error) {
       console.error("Disconnect calendar error:", error);
       alert("Failed to disconnect calendar");
+    }
+  };
+
+  const handleConnectGoogleFit = () => {
+    if (!user) return;
+    window.location.href = "/api/googlefit/connect";
+  };
+
+  const handleDisconnectGoogleFit = async () => {
+    if (!user) return;
+
+    try {
+      const res = await fetch("/api/googlefit/disconnect", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to disconnect Google Fit");
+      }
+
+      await checkGoogleFitStatus();
+      alert("Google Fit disconnected successfully");
+    } catch (error) {
+      console.error("Disconnect Google Fit error:", error);
+      alert("Failed to disconnect Google Fit");
     }
   };
 
@@ -423,6 +504,60 @@ function Settings() {
                     <p className='setting-note'>
                       Connect your Google Calendar to sync
                       important dates and events.
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {/* Google Fit Integration */}
+              <div className='setting-item'>
+                <label className='setting-label'>
+                  Google Fit
+                </label>
+                <p className='integration-description'>
+                  Google Fit integration allows you to sync
+                  your fitness and health data with this
+                  dashboard. By connecting your Google Fit
+                  account, you can view your activity data,
+                  workout summaries, step counts, and health
+                  metrics alongside your meeting transcripts
+                  and calendar events.
+                </p>
+                {googleFitStatus.loading ? (
+                  <div className='loading'>
+                    Checking connection...
+                  </div>
+                ) : googleFitStatus.connected ? (
+                  <>
+                    <button
+                      className='integration-btn connected'
+                      onClick={handleDisconnectGoogleFit}
+                    >
+                      <FiCheckCircle
+                        style={{ marginRight: "8px" }}
+                      />
+                      Connected
+                    </button>
+                    <p className='setting-note'>
+                      Your Google Fit account is connected.
+                      Activity data and health metrics will
+                      be synced.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className='integration-btn'
+                      onClick={handleConnectGoogleFit}
+                    >
+                      <FiActivity
+                        style={{ marginRight: "8px" }}
+                      />
+                      Connect Google Fit
+                    </button>
+                    <p className='setting-note'>
+                      Connect your Google Fit account to
+                      sync activity data and health metrics.
                     </p>
                   </>
                 )}

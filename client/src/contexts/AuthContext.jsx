@@ -7,8 +7,25 @@ import {
 
 const AuthContext = createContext(null);
 
+// Dummy user data for development
+const DUMMY_USER = {
+  userId: "google_123456789",
+  googleId: "123456789",
+  email: "dev.user@example.com",
+  name: "Dev User",
+  picture:
+    "https://via.placeholder.com/150/4285F4/FFFFFF?text=DU",
+};
+
+// Check if we should use dummy data (development mode)
+const USE_DUMMY_DATA =
+  import.meta.env.DEV ||
+  import.meta.env.VITE_USE_DUMMY_AUTH === "true" ||
+  localStorage.getItem("useDummyAuth") === "true";
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+
   const [loading, setLoading] = useState(true);
 
   // Check authentication status on mount
@@ -29,7 +46,8 @@ export function AuthProvider({ children }) {
     if (
       window.location.pathname === "/dashboard" &&
       !user &&
-      !loading
+      !loading &&
+      !USE_DUMMY_DATA
     ) {
       // Check auth again after redirect
       const intervalId = setInterval(() => {
@@ -49,6 +67,16 @@ export function AuthProvider({ children }) {
   }, [user, loading]);
 
   const checkAuth = async () => {
+    // Use dummy data in development mode
+    if (USE_DUMMY_DATA) {
+      console.log(
+        "🔧 Using dummy authentication data for development"
+      );
+      setUser(DUMMY_USER);
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/auth/me", {
         credentials: "include",
@@ -69,11 +97,24 @@ export function AuthProvider({ children }) {
   };
 
   const login = () => {
+    // In dummy mode, just set the user directly
+    if (USE_DUMMY_DATA) {
+      setUser(DUMMY_USER);
+      window.location.href = "/dashboard";
+      return;
+    }
     // Redirect to Google OAuth
     window.location.href = "/api/auth/google";
   };
 
   const logout = async () => {
+    // In dummy mode, just clear the user
+    if (USE_DUMMY_DATA) {
+      setUser(null);
+      window.location.href = "/";
+      return;
+    }
+
     try {
       await fetch("/api/auth/logout", {
         method: "POST",

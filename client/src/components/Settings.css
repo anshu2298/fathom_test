@@ -34,7 +34,10 @@
   overflow: hidden;
 }
 
-.settings-column-left,
+.settings-column-left {
+  overflow: hidden;
+}
+
 .settings-column-right {
   overflow-y: auto;
   overflow-x: hidden;
@@ -67,10 +70,17 @@
   flex-direction: column;
   gap: 24px;
   flex: 1;
-  overflow-y: auto;
   overflow-x: hidden;
   padding-right: 4px;
   min-height: 0;
+}
+
+.settings-column-left .settings-content {
+  overflow-y: hidden;
+}
+
+.settings-column-right .settings-content {
+  overflow-y: auto;
 }
 
 .setting-item {
@@ -263,23 +273,19 @@
   background: #a8a8a8;
 }
 
-.settings-column-left::-webkit-scrollbar,
 .settings-column-right::-webkit-scrollbar {
   width: 6px;
 }
 
-.settings-column-left::-webkit-scrollbar-track,
 .settings-column-right::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.settings-column-left::-webkit-scrollbar-thumb,
 .settings-column-right::-webkit-scrollbar-thumb {
   background: #c1c1c1;
   border-radius: 3px;
 }
 
-.settings-column-left::-webkit-scrollbar-thumb:hover,
 .settings-column-right::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
@@ -314,4 +320,3 @@
     padding: 0 16px;
   }
 }
-

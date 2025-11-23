@@ -1,49 +1,42 @@
-import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Link, useLocation } from "react-router-dom";
 import {
-  FiLayout,
-  FiMessageSquare,
+  FiBell,
+  FiHome,
+  FiFileText,
+  FiBarChart2,
+  FiPlay,
   FiSettings,
-  FiChevronLeft,
-  FiChevronRight,
+  FiLogOut,
+  FiSearch,
 } from "react-icons/fi";
 import ProfileDropdown from "./ProfileDropdown";
 import "./Layout.css";
 
 function Layout({ children }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const isActive = (path) => {
     return location.pathname === path;
   };
 
+  const handleLogout = async () => {
+    await logout();
+  };
+
   return (
     <div className='layout'>
       {/* Sidebar */}
-      <aside
-        className={`sidebar ${
-          sidebarOpen ? "open" : "closed"
-        }`}
-      >
-        <div className='sidebar-header'>
-          <h2 className='sidebar-logo'>
-            {`${user.name.split(" ")[0]}'s Dashboard`}
-          </h2>
-          <button
-            className='sidebar-toggle'
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-          >
-            {sidebarOpen ? (
-              <FiChevronLeft />
-            ) : (
-              <FiChevronRight />
-            )}
-          </button>
-        </div>
+      <aside className='sidebar'>
         <nav className='sidebar-nav'>
+          <div
+            className='nav-item nav-notification'
+            title='Notifications'
+          >
+            <FiBell className='nav-icon' />
+            <span className='notification-dot'></span>
+          </div>
           <Link
             to='/dashboard'
             className={`nav-item ${
@@ -53,11 +46,9 @@ function Layout({ children }) {
                 ? "active"
                 : ""
             }`}
+            title='Dashboard'
           >
-            <FiLayout className='nav-icon' />
-            {sidebarOpen && (
-              <span className='nav-text'>Dashboard</span>
-            )}
+            <FiHome className='nav-icon' />
           </Link>
           <Link
             to='/dashboard/meetings'
@@ -66,12 +57,23 @@ function Layout({ children }) {
                 ? "active"
                 : ""
             }`}
+            title='Meetings'
           >
-            <FiMessageSquare className='nav-icon' />
-            {sidebarOpen && (
-              <span className='nav-text'>Meetings</span>
-            )}
+            <FiFileText className='nav-icon' />
           </Link>
+          <Link
+            to='/dashboard'
+            className='nav-item'
+            title='Analytics'
+          >
+            <FiBarChart2 className='nav-icon' />
+          </Link>
+          <div
+            className='nav-item'
+            title='Media'
+          >
+            <FiPlay className='nav-icon' />
+          </div>
           <Link
             to='/dashboard/settings'
             className={`nav-item ${
@@ -79,12 +81,18 @@ function Layout({ children }) {
                 ? "active"
                 : ""
             }`}
+            title='Settings'
           >
             <FiSettings className='nav-icon' />
-            {sidebarOpen && (
-              <span className='nav-text'>Settings</span>
-            )}
           </Link>
+          <div className='nav-spacer' />
+          <button
+            className='nav-item nav-logout'
+            onClick={handleLogout}
+            title='Logout'
+          >
+            <FiLogOut className='nav-icon' />
+          </button>
         </nav>
       </aside>
 
@@ -93,9 +101,19 @@ function Layout({ children }) {
         {/* Header */}
         <header className='app-header'>
           <div className='header-left'>
-            <h1 className='app-title'>{`${
-              user.name.split(" ")[0]
-            }'s Dashboard`}</h1>
+            <p className='app-title'>{`${
+              user?.name?.split(" ")[0]
+            }'s Dashboard`}</p>
+          </div>
+          <div className='header-center'>
+            <div className='search-bar'>
+              <FiSearch className='search-icon' />
+              <input
+                type='text'
+                placeholder='Search'
+                className='search-input'
+              />
+            </div>
           </div>
           <div className='header-right'>
             {user && <ProfileDropdown user={user} />}
