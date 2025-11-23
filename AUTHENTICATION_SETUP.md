@@ -105,3 +105,4 @@ FATHOM_CLIENT_SECRET=your-fathom-client-secret
 - Sessions expire after 24 hours
 - Users can logout using the logout button in the dashboard header
 - All API routes automatically use the authenticated user's ID from the session
+-
