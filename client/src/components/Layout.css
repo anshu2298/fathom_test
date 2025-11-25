@@ -72,15 +72,23 @@
   position: relative;
 }
 
-.notification-dot {
+.notification-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 8px;
-  height: 8px;
-  background: #ffffff;
-  border-radius: 50%;
+  top: 4px;
+  right: 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background: #ef4444;
+  color: #ffffff;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 1;
+  line-height: 1;
 }
 
 .nav-spacer {

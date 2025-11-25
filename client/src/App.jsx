@@ -13,6 +13,7 @@ import Layout from "./components/Layout";
 import Dashboard from "./components/Dashboard";
 import Settings from "./components/Settings";
 import Fitness from "./components/Fitness";
+import Notifications from "./components/Notifications";
 import "./App.css";
 
 function ProtectedRoute({ children }) {
@@ -98,6 +99,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <Layout>
               <Fitness />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path='/dashboard/notifications'
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Notifications />
             </Layout>
           </ProtectedRoute>
         }

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -16,6 +17,7 @@ import "./Layout.css";
 function Layout({ children }) {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const [notificationCount, setNotificationCount] = useState(0);
 
   const isActive = (path) => {
     return location.pathname === path;
@@ -25,18 +27,49 @@ function Layout({ children }) {
     await logout();
   };
 
+  // Fetch notification count
+  useEffect(() => {
+    if (user) {
+      const fetchCount = async () => {
+        try {
+          const res = await fetch("/api/notifications/count", {
+            credentials: "include",
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setNotificationCount(data.count || 0);
+          }
+        } catch (error) {
+          console.error("Error fetching notification count:", error);
+        }
+      };
+
+      fetchCount();
+      // Refresh count every 5 minutes
+      const interval = setInterval(fetchCount, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
   return (
     <div className='layout'>
       {/* Sidebar */}
       <aside className='sidebar'>
         <nav className='sidebar-nav'>
-          <div
-            className='nav-item nav-notification'
+          <Link
+            to='/dashboard/notifications'
+            className={`nav-item nav-notification ${
+              isActive("/dashboard/notifications")
+                ? "active"
+                : ""
+            }`}
             title='Notifications'
           >
             <FiBell className='nav-icon' />
-            <span className='notification-dot'></span>
-          </div>
+            {notificationCount > 0 && (
+              <span className='notification-badge'>{notificationCount > 9 ? '9+' : notificationCount}</span>
+            )}
+          </Link>
           <Link
             to='/dashboard'
             className={`nav-item ${
