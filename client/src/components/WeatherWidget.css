@@ -1,0 +1,124 @@
+.weather-widget {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  height: 40px;
+  background: linear-gradient(135deg, #8BAE66 0%, #628141 100%);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(98, 129, 65, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  font-family: 'Poppins', sans-serif;
+}
+
+.weather-widget::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
+  animation: float 4s ease-in-out infinite;
+}
+
+.weather-widget:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 20px rgba(98, 129, 65, 0.4);
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(-20px, -20px) rotate(180deg);
+  }
+}
+
+.weather-icon {
+  font-size: 18px;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+  animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.weather-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: relative;
+  z-index: 1;
+}
+
+.weather-temp {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  letter-spacing: 0.3px;
+}
+
+.weather-location {
+  font-size: 9px;
+  color: #ffffff;
+  opacity: 0.9;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-weight: 500;
+}
+
+.weather-loading,
+.weather-error {
+  font-size: 11px;
+  color: #ffffff;
+  opacity: 0.8;
+  padding: 4px 8px;
+  white-space: nowrap;
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 768px) {
+  .weather-widget {
+    padding: 6px 10px;
+    gap: 6px;
+    height: 36px;
+  }
+
+  .weather-icon {
+    font-size: 16px;
+  }
+
+  .weather-temp {
+    font-size: 12px;
+  }
+
+  .weather-location {
+    font-size: 8px;
+    max-width: 60px;
+  }
+}

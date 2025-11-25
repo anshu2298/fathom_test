@@ -13,6 +13,7 @@ import { setupUserRoutes } from "./userRoutes.js";
 import { setupCalendarRoutes } from "./calendarRoutes.js";
 import { setupGoogleFitRoutes } from "./googleFitRoutes.js";
 import { setupNotificationRoutes } from "./notificationRoutes.js";
+import { setupWeatherRoutes } from "./weatherRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -107,6 +108,11 @@ setupGoogleFitRoutes(app);
 // Setup Notification Routes
 // ============================================
 setupNotificationRoutes(app);
+
+// ============================================
+// Setup Weather Routes
+// ============================================
+setupWeatherRoutes(app);
 
 // ============================================
 // Catch-all route for React Router (must be last)

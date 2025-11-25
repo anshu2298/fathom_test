@@ -31,7 +31,11 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #8B5CF6;
+  background: linear-gradient(
+    135deg,
+    #e67e22 0%,
+    #628141 100%
+  );
   color: white;
   display: flex;
   align-items: center;
@@ -39,20 +43,22 @@
   font-weight: 600;
   font-size: 14px;
   border: none;
+  font-family: "Poppins", sans-serif;
 }
-
 
 .dropdown-menu {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  background: white;
+  background: #ebd5ab;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   min-width: 240px;
   z-index: 1000;
   overflow: hidden;
   animation: slideDown 0.2s ease;
+  border: 1px solid rgba(98, 129, 65, 0.2);
+  font-family: "Poppins", sans-serif;
 }
 
 @keyframes slideDown {
@@ -68,7 +74,7 @@
 
 .dropdown-header {
   padding: 16px;
-  background: #f9fafb;
+  background: #8bae66;
 }
 
 .dropdown-user-info {
@@ -89,14 +95,19 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #3b82f6;
+  background: linear-gradient(
+    135deg,
+    #e67e22 0%,
+    #628141 100%
+  );
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
   font-size: 18px;
-  border: 2px solid #e5e7eb;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  font-family: "Poppins", sans-serif;
 }
 
 .dropdown-user-details {
@@ -106,7 +117,7 @@
 
 .dropdown-user-name {
   font-weight: 600;
-  color: #111827;
+  color: #222222;
   font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
@@ -115,7 +126,8 @@
 
 .dropdown-user-email {
   font-size: 12px;
-  color: #6b7280;
+  color: #222222;
+  opacity: 0.6;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -123,7 +135,7 @@
 
 .dropdown-divider {
   height: 1px;
-  background: #e5e7eb;
+  background: rgba(34, 34, 34, 0.1);
   margin: 4px 0;
 }
 
@@ -137,13 +149,13 @@
   border: none;
   text-align: left;
   cursor: pointer;
-  color: #374151;
+  color: #222222;
   font-size: 14px;
   transition: background 0.2s;
 }
 
 .dropdown-item:hover {
-  background: #f3f4f6;
+  background: rgba(230, 126, 34, 0.15);
 }
 
 .dropdown-icon {
@@ -154,4 +166,3 @@
   align-items: center;
   justify-content: center;
 }
-

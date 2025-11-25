@@ -415,7 +415,7 @@ function Settings() {
                 <label className='setting-label'>
                   Fathom
                 </label>
-                <p className='integration-description'>
+                {/* <p className='integration-description'>
                   Fathom is a meeting recording and
                   transcription service. By connecting your
                   Fathom account, you can automatically sync
@@ -423,7 +423,7 @@ function Settings() {
                   access AI-generated insights from your
                   recorded meetings directly in this
                   dashboard.
-                </p>
+                </p> */}
                 <button
                   className={`integration-btn ${
                     connectionStatus.connected
@@ -461,14 +461,14 @@ function Settings() {
                 <label className='setting-label'>
                   Google Calendar
                 </label>
-                <p className='integration-description'>
+                {/* <p className='integration-description'>
                   Google Calendar integration allows you to
                   sync your calendar events and meetings
                   with this dashboard. This helps you view
                   your scheduled meetings, important dates,
                   and upcoming events alongside your meeting
                   transcripts and summaries.
-                </p>
+                </p> */}
                 {calendarStatus.loading ? (
                   <div className='loading'>
                     Checking connection...
@@ -514,7 +514,7 @@ function Settings() {
                 <label className='setting-label'>
                   Google Fit
                 </label>
-                <p className='integration-description'>
+                {/* <p className='integration-description'>
                   Google Fit integration allows you to sync
                   your fitness and health data with this
                   dashboard. By connecting your Google Fit
@@ -522,7 +522,7 @@ function Settings() {
                   workout summaries, step counts, and health
                   metrics alongside your meeting transcripts
                   and calendar events.
-                </p>
+                </p> */}
                 {googleFitStatus.loading ? (
                   <div className='loading'>
                     Checking connection...

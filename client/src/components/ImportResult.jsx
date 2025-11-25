@@ -22,9 +22,9 @@ function ImportResult({ result }) {
         <div
           className={`result-message ${hasImported ? "success" : ""}`}
           style={{
-            background: hasImported ? "#d1fae5" : "#dbeafe",
-            color: hasImported ? "#065f46" : "#1e40af",
-            border: `1px solid ${hasImported ? "#10b981" : "#3b82f6"}`,
+            background: hasImported ? "rgba(139, 174, 102, 0.3)" : "#8BAE66",
+            color: hasImported ? "#222222" : "#222222",
+            border: `1px solid ${hasImported ? "#628141" : "rgba(98, 129, 65, 0.2)"}`,
           }}
         >
           {hasImported ? (
@@ -43,7 +43,8 @@ function ImportResult({ result }) {
                 <span
                   style={{
                     fontSize: "12px",
-                    color: "#6b7280",
+                    color: "#222222",
+                    opacity: 0.6,
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "4px",

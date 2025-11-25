@@ -1,10 +1,11 @@
 .landing-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #E67E22 0%, #628141 50%, #8BAE66 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  font-family: 'Poppins', sans-serif;
 }
 
 .landing-container {
@@ -43,8 +44,8 @@
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  background: white;
-  color: #333;
+  background: #222222;
+  color: #EBD5AB;
   border: none;
   padding: 14px 32px;
   font-size: 16px;
@@ -53,6 +54,7 @@
   cursor: pointer;
   transition: all 0.3s;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-family: 'Poppins', sans-serif;
 }
 
 .btn-google-login:hover {
@@ -77,12 +79,14 @@
 }
 
 .feature-card {
-  background: white;
+  background: #EBD5AB;
   padding: 32px;
   border-radius: 12px;
   text-align: center;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   transition: transform 0.3s;
+  border: 1px solid rgba(98, 129, 65, 0.2);
+  font-family: 'Poppins', sans-serif;
 }
 
 .feature-card:hover {
@@ -95,17 +99,18 @@
   width: 48px;
   height: 48px;
   margin-bottom: 16px;
-  color: #3b82f6;
+  color: #E67E22;
 }
 
 .feature-card h3 {
-  color: #111827;
+  color: #222222;
   margin-bottom: 12px;
   font-size: 20px;
 }
 
 .feature-card p {
-  color: #6b7280;
+  color: #222222;
+  opacity: 0.6;
   line-height: 1.6;
   margin: 0;
 }

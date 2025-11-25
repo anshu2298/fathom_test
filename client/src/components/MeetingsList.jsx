@@ -22,7 +22,8 @@ function MeetingsList({ meetings, loading, onMeetingClick }) {
               style={{
                 fontSize: "48px",
                 marginBottom: "16px",
-                color: "#9ca3af",
+                color: "#222222",
+                opacity: 0.5,
               }}
             />
             <p>

@@ -311,25 +311,25 @@ function Fitness() {
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={weeklyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(34, 34, 34, 0.1)" />
                 <XAxis 
                   dataKey="date" 
-                  stroke="#666"
+                  stroke="#222222"
                   tick={{ fontSize: 12 }}
                 />
                 <YAxis 
-                  stroke="#666"
+                  stroke="#222222"
                   tick={{ fontSize: 12 }}
                 />
                 <Tooltip 
                   contentStyle={{ 
-                    backgroundColor: '#fff', 
-                    border: '1px solid #e0e0e0',
+                    backgroundColor: '#EBD5AB', 
+                    border: '1px solid rgba(34, 34, 34, 0.1)',
                     borderRadius: '8px'
                   }}
                   formatter={(value) => [formatNumber(value), 'Steps']}
                 />
-                <Bar dataKey="steps" fill="#10b981" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="steps" fill="#E67E22" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -346,20 +346,20 @@ function Fitness() {
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={weeklyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(34, 34, 34, 0.1)" />
                 <XAxis 
                   dataKey="date" 
-                  stroke="#666"
+                  stroke="#222222"
                   tick={{ fontSize: 12 }}
                 />
                 <YAxis 
-                  stroke="#666"
+                  stroke="#222222"
                   tick={{ fontSize: 12 }}
                 />
                 <Tooltip 
                   contentStyle={{ 
-                    backgroundColor: '#fff', 
-                    border: '1px solid #e0e0e0',
+                    backgroundColor: '#EBD5AB', 
+                    border: '1px solid rgba(34, 34, 34, 0.1)',
                     borderRadius: '8px'
                   }}
                   formatter={(value) => [formatNumber(value), 'kcal']}
@@ -367,9 +367,9 @@ function Fitness() {
                 <Line 
                   type="monotone" 
                   dataKey="calories" 
-                  stroke="#f59e0b" 
+                  stroke="#E67E22" 
                   strokeWidth={3}
-                  dot={{ fill: '#f59e0b', r: 4 }}
+                  dot={{ fill: '#E67E22', r: 4 }}
                   activeDot={{ r: 6 }}
                 />
               </LineChart>

@@ -11,13 +11,15 @@ import {
   FiLogOut,
   FiSearch,
 } from "react-icons/fi";
-import ProfileDropdown from "./ProfileDropdown";
+import Clock from "./Clock";
+import WeatherWidget from "./WeatherWidget";
 import "./Layout.css";
 
 function Layout({ children }) {
   const { user, logout } = useAuth();
   const location = useLocation();
-  const [notificationCount, setNotificationCount] = useState(0);
+  const [notificationCount, setNotificationCount] =
+    useState(0);
 
   const isActive = (path) => {
     return location.pathname === path;
@@ -32,21 +34,30 @@ function Layout({ children }) {
     if (user) {
       const fetchCount = async () => {
         try {
-          const res = await fetch("/api/notifications/count", {
-            credentials: "include",
-          });
+          const res = await fetch(
+            "/api/notifications/count",
+            {
+              credentials: "include",
+            }
+          );
           if (res.ok) {
             const data = await res.json();
             setNotificationCount(data.count || 0);
           }
         } catch (error) {
-          console.error("Error fetching notification count:", error);
+          console.error(
+            "Error fetching notification count:",
+            error
+          );
         }
       };
 
       fetchCount();
       // Refresh count every 5 minutes
-      const interval = setInterval(fetchCount, 5 * 60 * 1000);
+      const interval = setInterval(
+        fetchCount,
+        5 * 60 * 1000
+      );
       return () => clearInterval(interval);
     }
   }, [user]);
@@ -67,7 +78,11 @@ function Layout({ children }) {
           >
             <FiBell className='nav-icon' />
             {notificationCount > 0 && (
-              <span className='notification-badge'>{notificationCount > 9 ? '9+' : notificationCount}</span>
+              <span className='notification-badge'>
+                {notificationCount > 9
+                  ? "9+"
+                  : notificationCount}
+              </span>
             )}
           </Link>
           <Link
@@ -97,9 +112,7 @@ function Layout({ children }) {
           <Link
             to='/dashboard/fitness'
             className={`nav-item ${
-              isActive("/dashboard/fitness")
-                ? "active"
-                : ""
+              isActive("/dashboard/fitness") ? "active" : ""
             }`}
             title='Fitness'
           >
@@ -140,9 +153,10 @@ function Layout({ children }) {
           <div className='header-left'>
             <p className='app-title'>{`${
               user?.name?.split(" ")[0]
-            }'s Dashboard`}</p>
+            }'s`}</p>
+            <p className='header-title'>Dashboard</p>
           </div>
-          {/* <div className='header-center'></div> */}
+          <div className='header-center'></div>
           <div className='header-right'>
             <div className='search-bar'>
               <FiSearch className='search-icon' />
@@ -152,7 +166,26 @@ function Layout({ children }) {
                 className='search-input'
               />
             </div>
-            {user && <ProfileDropdown user={user} />}
+            <div className='header-widgets'>
+              <Clock />
+              <WeatherWidget />
+            </div>
+            {user && (
+              <div className='profile-image-container'>
+                {user.picture ? (
+                  <img
+                    src={user.picture}
+                    alt={user.name || "Profile"}
+                    className='profile-image'
+                  />
+                ) : (
+                  <div className='profile-image-placeholder'>
+                    {user.name?.charAt(0).toUpperCase() ||
+                      "U"}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </header>
 
