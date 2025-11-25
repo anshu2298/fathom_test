@@ -12,6 +12,7 @@ import LandingPage from "./components/LandingPage";
 import Layout from "./components/Layout";
 import Dashboard from "./components/Dashboard";
 import Settings from "./components/Settings";
+import Sports from "./components/Sports";
 import "./App.css";
 
 function ProtectedRoute({ children }) {
@@ -87,6 +88,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <Layout>
               <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path='/dashboard/sports'
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Sports />
             </Layout>
           </ProtectedRoute>
         }

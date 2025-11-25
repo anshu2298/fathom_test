@@ -11,6 +11,7 @@ import { setupMeetingRoutes } from "./meetingRoutes.js";
 import { setupGoogleAuth } from "./googleAuth.js";
 import { setupUserRoutes } from "./userRoutes.js";
 import { setupCalendarRoutes } from "./calendarRoutes.js";
+import { setupGoogleFitRoutes } from "./googleFitRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -95,6 +96,11 @@ setupUserRoutes(app);
 // Setup Calendar Routes
 // ============================================
 setupCalendarRoutes(app);
+
+// ============================================
+// Setup Google Fit Routes
+// ============================================
+setupGoogleFitRoutes(app);
 
 // ============================================
 // Catch-all route for React Router (must be last)

@@ -7,7 +7,7 @@
 /* Sidebar */
 .sidebar {
   width: 80px;
-  background: #8B5CF6;
+  background: #8b5cf6;
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -103,9 +103,8 @@
 
 /* Header */
 .app-header {
-  background: #ffffff;
+  background: #f5f4f8;
   padding: 20px 32px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -160,7 +159,7 @@
   padding: 10px 14px 10px 40px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
-  background: #f9fafb;
+  background: #f4f4f4;
   font-size: 14px;
   color: #1a1a1a;
   transition: all 0.2s;
@@ -179,6 +178,7 @@
 
 .header-right {
   display: flex;
+  gap: 20px;
   align-items: center;
   justify-content: flex-end;
   flex-shrink: 0;

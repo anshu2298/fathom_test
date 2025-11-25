@@ -4,7 +4,7 @@ import {
   FiBell,
   FiHome,
   FiFileText,
-  FiBarChart2,
+  FiActivity,
   FiPlay,
   FiSettings,
   FiLogOut,
@@ -62,11 +62,15 @@ function Layout({ children }) {
             <FiFileText className='nav-icon' />
           </Link>
           <Link
-            to='/dashboard'
-            className='nav-item'
-            title='Analytics'
+            to='/dashboard/sports'
+            className={`nav-item ${
+              isActive("/dashboard/sports")
+                ? "active"
+                : ""
+            }`}
+            title='Sports'
           >
-            <FiBarChart2 className='nav-icon' />
+            <FiActivity className='nav-icon' />
           </Link>
           <div
             className='nav-item'
@@ -105,7 +109,8 @@ function Layout({ children }) {
               user?.name?.split(" ")[0]
             }'s Dashboard`}</p>
           </div>
-          <div className='header-center'>
+          {/* <div className='header-center'></div> */}
+          <div className='header-right'>
             <div className='search-bar'>
               <FiSearch className='search-icon' />
               <input
@@ -114,8 +119,6 @@ function Layout({ children }) {
                 className='search-input'
               />
             </div>
-          </div>
-          <div className='header-right'>
             {user && <ProfileDropdown user={user} />}
           </div>
         </header>
