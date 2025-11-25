@@ -1,16 +1,21 @@
 import { FiInbox } from "react-icons/fi";
 import MeetingItem from "./MeetingItem";
+import { SkeletonCard } from "./SkeletonLoader";
 
 function MeetingsList({ meetings, loading, onMeetingClick }) {
   return (
     <div className="card">
       <h3>
         Received Meetings
-        <span className="badge badge-info">{meetings.length}</span>
+        {!loading && <span className="badge badge-info">{meetings.length}</span>}
       </h3>
       <div>
         {loading ? (
-          <div className="loading">Loading meetings...</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {[...Array(3)].map((_, i) => (
+              <SkeletonCard key={i} height="120px" />
+            ))}
+          </div>
         ) : meetings.length === 0 ? (
           <div className="empty-state">
             <FiInbox

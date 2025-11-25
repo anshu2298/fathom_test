@@ -12,7 +12,7 @@ import LandingPage from "./components/LandingPage";
 import Layout from "./components/Layout";
 import Dashboard from "./components/Dashboard";
 import Settings from "./components/Settings";
-import Sports from "./components/Sports";
+import Fitness from "./components/Fitness";
 import "./App.css";
 
 function ProtectedRoute({ children }) {
@@ -93,11 +93,11 @@ function AppRoutes() {
         }
       />
       <Route
-        path='/dashboard/sports'
+        path='/dashboard/fitness'
         element={
           <ProtectedRoute>
             <Layout>
-              <Sports />
+              <Fitness />
             </Layout>
           </ProtectedRoute>
         }

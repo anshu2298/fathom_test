@@ -62,13 +62,13 @@ function Layout({ children }) {
             <FiFileText className='nav-icon' />
           </Link>
           <Link
-            to='/dashboard/sports'
+            to='/dashboard/fitness'
             className={`nav-item ${
-              isActive("/dashboard/sports")
+              isActive("/dashboard/fitness")
                 ? "active"
                 : ""
             }`}
-            title='Sports'
+            title='Fitness'
           >
             <FiActivity className='nav-icon' />
           </Link>

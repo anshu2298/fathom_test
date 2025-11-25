@@ -4,6 +4,7 @@ import Actions from "./Actions";
 import SyncMeetings from "./SyncMeetings";
 import MeetingsList from "./MeetingsList";
 import MeetingDetailsModal from "./MeetingDetailsModal";
+import { SkeletonCard } from "./SkeletonLoader";
 
 function Dashboard() {
   const { user } = useAuth();
@@ -122,7 +123,11 @@ function Dashboard() {
   }, [user]);
 
   if (!user) {
-    return <div>Loading...</div>;
+    return (
+      <div className="dashboard-content">
+        <SkeletonCard height="200px" />
+      </div>
+    );
   }
 
   return (

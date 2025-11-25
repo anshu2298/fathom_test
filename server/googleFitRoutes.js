@@ -519,5 +519,177 @@ export const setupGoogleFitRoutes = (app) => {
       res.status(500).json({ error: "Failed to fetch Google Fit data" });
     }
   });
+
+  // Get weekly Google Fit data (last 7 days)
+  app.get("/api/googlefit/weekly", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.userId;
+
+      // Get user's Google Fit tokens
+      const { data, error: fetchError } = await supabase
+        .from("fathom_connections")
+        .select("googlefit_access_token, googlefit_refresh_token, googlefit_token_expires_at")
+        .eq("user_id", userId)
+        .single();
+
+      if (fetchError || !data?.googlefit_access_token) {
+        return res.status(401).json({ error: "Google Fit not connected" });
+      }
+
+      // Check if token is expired and refresh if needed
+      let accessToken = data.googlefit_access_token;
+      const isExpired = data.googlefit_token_expires_at 
+        ? new Date(data.googlefit_token_expires_at * 1000) < new Date()
+        : false;
+
+      if (isExpired && data.googlefit_refresh_token) {
+        const oauth2Client = new google.auth.OAuth2(
+          process.env.GOOGLE_CLIENT_ID,
+          process.env.GOOGLE_CLIENT_SECRET,
+          `${process.env.APP_URL || "http://localhost:3000"}/api/googlefit/callback`
+        );
+
+        oauth2Client.setCredentials({
+          refresh_token: data.googlefit_refresh_token,
+        });
+
+        const { credentials } = await oauth2Client.refreshAccessToken();
+        accessToken = credentials.access_token;
+
+        await supabase
+          .from("fathom_connections")
+          .update({
+            googlefit_access_token: credentials.access_token,
+            googlefit_token_expires_at: credentials.expiry_date 
+              ? Math.floor(credentials.expiry_date / 1000) 
+              : null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", userId);
+      }
+
+      // Get last 7 days
+      const now = new Date();
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const startOfWeek = new Date(endOfToday);
+      startOfWeek.setDate(startOfWeek.getDate() - 7);
+
+      const baseUrl = "https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate";
+
+      // Helper function to extract value from response
+      const extractValueFromResponse = (data) => {
+        if (!data.bucket || data.bucket.length === 0) {
+          return null;
+        }
+        
+        let total = 0;
+        data.bucket.forEach((bucket) => {
+          if (bucket.dataset && bucket.dataset.length > 0) {
+            bucket.dataset.forEach((dataset) => {
+              if (dataset.point && dataset.point.length > 0) {
+                dataset.point.forEach((point) => {
+                  if (point.value && point.value.length > 0) {
+                    const value = point.value[0].intVal !== undefined 
+                      ? point.value[0].intVal 
+                      : (point.value[0].fpVal !== undefined ? point.value[0].fpVal : 0);
+                    total += value;
+                  }
+                });
+              }
+            });
+          }
+        });
+        
+        return total > 0 ? total : 0;
+      };
+
+      // Fetch data for each day
+      const weeklyData = [];
+      const dataTypes = {
+        steps: "com.google.step_count.delta",
+        calories: "com.google.calories.expended",
+        heartPoints: "com.google.heart_minutes",
+      };
+
+      for (let i = 6; i >= 0; i--) {
+        const dayStart = new Date(startOfWeek);
+        dayStart.setDate(dayStart.getDate() + i);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setDate(dayEnd.getDate() + 1);
+
+        const dayStartMillis = dayStart.getTime();
+        const dayEndMillis = dayEnd.getTime();
+
+        // Fetch steps, calories, and heart points for this day
+        const [steps, calories, heartPoints] = await Promise.all([
+          fetch(baseUrl, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              aggregateBy: [{ dataTypeName: dataTypes.steps }],
+              bucketByTime: { durationMillis: 86400000 },
+              startTimeMillis: dayStartMillis,
+              endTimeMillis: dayEndMillis,
+            }),
+          }).then(async (res) => {
+            if (!res.ok) return null;
+            const data = await res.json();
+            return extractValueFromResponse(data);
+          }).catch(() => null),
+
+          fetch(baseUrl, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              aggregateBy: [{ dataTypeName: dataTypes.calories }],
+              bucketByTime: { durationMillis: 86400000 },
+              startTimeMillis: dayStartMillis,
+              endTimeMillis: dayEndMillis,
+            }),
+          }).then(async (res) => {
+            if (!res.ok) return null;
+            const data = await res.json();
+            return extractValueFromResponse(data);
+          }).catch(() => null),
+
+          fetch(baseUrl, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              aggregateBy: [{ dataTypeName: dataTypes.heartPoints }],
+              bucketByTime: { durationMillis: 86400000 },
+              startTimeMillis: dayStartMillis,
+              endTimeMillis: dayEndMillis,
+            }),
+          }).then(async (res) => {
+            if (!res.ok) return null;
+            const data = await res.json();
+            return extractValueFromResponse(data);
+          }).catch(() => null),
+        ]);
+
+        weeklyData.push({
+          date: dayStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+          steps: steps ?? 0,
+          calories: calories ?? 0,
+          heartPoints: heartPoints ?? 0,
+        });
+      }
+
+      res.json({ weeklyData });
+    } catch (error) {
+      console.error("Get weekly Google Fit data error:", error);
+      res.status(500).json({ error: "Failed to fetch weekly Google Fit data" });
+    }
+  });
 };
 

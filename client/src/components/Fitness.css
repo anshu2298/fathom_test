@@ -1,0 +1,371 @@
+.fitness-content {
+  padding: 24px 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.fitness-header {
+  margin-bottom: 32px;
+}
+
+.fitness-header h1 {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
+}
+
+.fitness-subtitle {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+}
+
+.fitness-not-connected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  text-align: center;
+  padding: 48px;
+}
+
+.fitness-icon-large {
+  font-size: 64px;
+  color: #8b5cf6;
+  margin-bottom: 24px;
+}
+
+.fitness-not-connected h2 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 12px 0;
+}
+
+.fitness-not-connected p {
+  font-size: 16px;
+  color: #666;
+  margin: 0 0 32px 0;
+  max-width: 400px;
+}
+
+.fitness-connect-btn {
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.fitness-connect-btn:hover {
+  background: #7c3aed;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.fitness-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  font-size: 18px;
+  color: #666;
+}
+
+.fitness-error {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fitness-error p {
+  margin: 0;
+  color: #991b1b;
+}
+
+.fitness-error button {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.fitness-error button:hover {
+  background: #b91c1c;
+}
+
+/* Today's Stats Widget */
+.fitness-today-widget {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 24px;
+}
+
+.today-widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.today-widget-header h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.today-date {
+  font-size: 14px;
+  color: #666;
+}
+
+.today-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.today-stat {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.today-stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.today-stat-icon.steps {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.today-stat-icon.calories {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.today-stat-icon.distance {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.today-stat-icon.minutes {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
+
+.today-stat-icon.heart {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.today-stat-icon.points {
+  background: rgba(236, 72, 153, 0.1);
+  color: #ec4899;
+}
+
+.today-stat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.today-stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.today-stat-label {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.today-stat-unit {
+  font-size: 12px;
+  color: #999;
+}
+
+.today-stat-progress {
+  margin-top: 8px;
+}
+
+.progress-bar {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-fill.steps {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.progress-fill.minutes {
+  background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+}
+
+.progress-fill.points {
+  background: linear-gradient(90deg, #ec4899, #f472b6);
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Charts Section */
+.fitness-charts-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.fitness-chart-widget {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.chart-header {
+  margin-bottom: 24px;
+}
+
+.chart-header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 4px 0;
+}
+
+.chart-subtitle {
+  font-size: 14px;
+  color: #666;
+}
+
+/* Weekly Heart Points Target */
+.fitness-weekly-target {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.weekly-target-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.weekly-target-header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 4px 0;
+}
+
+.weekly-target-subtitle {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+.weekly-target-value {
+  font-size: 48px;
+  font-weight: 700;
+  color: #ec4899;
+}
+
+.weekly-target-progress {
+  margin-top: 16px;
+}
+
+.progress-bar-large {
+  height: 12px;
+  background: #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-fill-large {
+  height: 100%;
+  background: linear-gradient(90deg, #ec4899, #f472b6);
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.weekly-target-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: #666;
+}
+
+@media (max-width: 768px) {
+  .fitness-content {
+    padding: 16px;
+  }
+
+  .fitness-charts-section {
+    grid-template-columns: 1fr;
+  }
+
+  .today-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .today-stat-value {
+    font-size: 24px;
+  }
+
+  .weekly-target-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .weekly-target-value {
+    font-size: 36px;
+  }
+}
+
